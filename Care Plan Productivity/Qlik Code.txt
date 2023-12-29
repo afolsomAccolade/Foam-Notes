@@ -1,0 +1,2459 @@
+LIB CONNECT TO 'acp_edw (okta_addison.folsom@accolade.com)';
+
+
+
+SQL
+DROP TABLE IF EXISTS #dim_date;
+SQL
+CREATE TABLE #dim_date AS
+SELECT *
+FROM info_layer.dim_date
+WHERE full_date between '2023-06-01' and '2023-12-31';
+
+SQL
+DROP TABLE IF EXISTS #practitioners;
+SQL
+CREATE TABLE #practitioners AS
+select dim_date.full_date,
+       wfc.*,
+       row_number() over (partition by dim_date.full_date, wfc.practitioner_id order by wfc.eff_dtm) as rn
+
+from #dim_date as dim_date
+         left join info_layer.work_force_dtl wfc
+                   on LEAST(date(wfc.eff_dtm),wfc.manager_start_dtm::date) <= dim_date.full_date
+                       and (wfc.end_dtm::date >= dim_date.full_date or wfc.end_dtm::date is null);
+
+
+SQL
+DROP TABLE IF EXISTS #managers1;
+SQL
+CREATE TABLE #managers1 AS
+select prac.*, row_number() over (partition by prac.full_date, prac.practitioner_id order by prac.eff_dtm) as rn1,
+       m1.work_force_id as m1_workforce_id,
+       m1.manager_id as m1_manager_id,
+       m1.first_name || ' ' || m1.family_name as m1_manager_name
+from (SELECT * FROM #practitioners WHERE rn = 1) prac
+         left join info_layer.work_force_dtl m1
+                   on prac.manager_id = m1.work_force_id
+                       and least(date(m1.eff_dtm),m1.manager_start_dtm::date) <= prac.full_date
+                       and (m1.end_dtm::date >= prac.full_date or m1.end_dtm::date is null);
+
+
+SQL
+DROP TABLE IF EXISTS #practitioners;
+SQL
+DROP TABLE IF EXISTS #managers2;
+SQL
+CREATE TABLE #managers2 AS
+select managers1.*, row_number() over (partition by managers1.full_date, managers1.practitioner_id order by managers1.eff_dtm) as rn2,
+       m2.work_force_id as m2_workforce_id,
+       m2.manager_id as m2_manager_id,
+       m2.first_name || ' ' || m2.family_name as m2_manager_name
+from (SELECT * FROM #managers1 WHERE rn = 1) as managers1
+         left join info_layer.work_force_dtl m2
+                   on managers1.m1_manager_id = m2.work_force_id
+                       and least(date(m2.eff_dtm),m2.manager_start_dtm::date) <= managers1.full_date
+                       and (m2.end_dtm::date >= managers1.full_date or m2.end_dtm::date is null);
+
+
+SQL
+DROP TABLE IF EXISTS #managers1;
+SQL
+DROP TABLE IF EXISTS #managers3;
+SQL
+CREATE TABLE #managers3 AS
+select managers2.*, row_number() over (partition by managers2.full_date, managers2.practitioner_id order by managers2.eff_dtm) as rn3,
+       m3.work_force_id as m3_workforce_id,
+       m3.manager_id as m3_manager_id,
+       m3.first_name || ' ' || m3.family_name as m3_manager_name
+from (SELECT * FROM #managers2 WHERE rn2 = 1) managers2
+         left join info_layer.work_force_dtl m3
+                   on managers2.m2_manager_id = m3.work_force_id
+                       and least(date(m3.eff_dtm),m3.manager_start_dtm::date) <= managers2.full_date
+                       and (m3.end_dtm::date >= managers2.full_date or m3.end_dtm::date is null);
+
+
+SQL
+DROP TABLE IF EXISTS #managers2;
+SQL
+DROP TABLE IF EXISTS #managers4;
+SQL
+CREATE TABLE #managers4 AS
+select managers3.*, row_number() over (partition by managers3.full_date, managers3.practitioner_id order by managers3.eff_dtm) as rn4,
+       m4.work_force_id as m4_workforce_id,
+       m4.manager_id as m4_manager_id,
+       m4.first_name || ' ' || m4.family_name as m4_manager_name
+from (SELECT * FROM #managers3 WHERE rn3 = 1) managers3
+         left join info_layer.work_force_dtl m4
+                   on managers3.m3_manager_id = m4.work_force_id
+                       and least(date(m4.eff_dtm),m4.manager_start_dtm::date) <= managers3.full_date
+                       and (m4.end_dtm::date >= managers3.full_date or m4.end_dtm::date is null);
+
+
+SQL
+DROP TABLE IF EXISTS #managers3;
+SQL
+DROP TABLE IF EXISTS #managers5;
+SQL
+CREATE TABLE #managers5 AS
+select managers4.*, row_number() over (partition by managers4.full_date, managers4.practitioner_id order by managers4.eff_dtm) as rn5,
+       m5.work_force_id as m5_workforce_id,
+       m5.manager_id as m5_manager_id,
+       m5.first_name || ' ' || m5.family_name as m5_manager_name
+from (SELECT * FROM #managers4 WHERE rn4 = 1) managers4
+         left join info_layer.work_force_dtl m5
+                   on managers4.m4_manager_id = m5.work_force_id
+                       and least(date(m5.eff_dtm),m5.manager_start_dtm::date) <= managers4.full_date
+                       and (m5.end_dtm::date >= managers4.full_date or m5.end_dtm::date is null);
+
+
+SQL
+DROP TABLE IF EXISTS #managers4;
+SQL
+DROP TABLE IF EXISTS #managers6;
+SQL
+CREATE TABLE #managers6 AS
+select managers5.*, row_number() over (partition by managers5.full_date, managers5.practitioner_id order by managers5.eff_dtm) as rn6,
+       m6.work_force_id as m6_workforce_id,
+       m6.manager_id as m6_manager_id,
+       m6.first_name || ' ' || m6.family_name as m6_manager_name
+from (SELECT * FROM #managers5 WHERE rn5 = 1) managers5
+         left join info_layer.work_force_dtl m6
+                   on managers5.m5_manager_id = m6.work_force_id
+                       and least(date(m6.eff_dtm),m6.manager_start_dtm::date) <= managers5.full_date
+                       and (m6.end_dtm::date >= managers5.full_date or m6.end_dtm::date is null);
+
+
+SQL
+DROP TABLE IF EXISTS #managers5;
+SQL
+DROP TABLE IF EXISTS #practitioners_new;
+SQL
+CREATE TABLE #practitioners_new AS
+WITH data AS (
+    SELECT m6.*, row_number() over (partition by m6.full_date, m6.practitioner_id order by m6.eff_dtm) as rn7
+    FROM #managers6 as m6)
+SELECT *
+from data
+where data.rn7 = 1;
+
+SQL
+DROP TABLE IF EXISTS #dim_date;
+SQL
+DROP TABLE IF EXISTS #managers6;
+SQL
+
+
+DROP TABLE IF EXISTS #workers;
+SQL
+CREATE TABLE #workers AS (
+    SELECT  prac.full_date as date,
+            dim_date.year_number,
+            dim_date.qtr_number,
+            dim_date.month_number,
+            dim_date.month_day_number,
+            dim_date.year_number||lpad(dim_date.month_number,2,0) as period,
+            case when dim_date.day_is_weekday_flg = 'true' then 1 else 0 end as weekday_ind,
+            case when dim_date.acc_holiday_flg = 'true' then 1 else 0 end as accd_holiday_ind,
+            dim_date.year_week_number as week_number,
+            NVL(m6_manager_name,m5_manager_name,m4_manager_name,m3_manager_name,m2_manager_name,m1_manager_name) AS highest_manager,
+            m1_manager_name as manager_1, m2_manager_name as manager_2, m3_manager_name as manager_3, m4_manager_name as manager_4,
+            m5_manager_name as manager_5, m6_manager_name as manager_6,
+            prac.first_name as practitioner_first_name,
+            prac.family_name as practitioner_last_name,
+            prac.first_name || ' ' || prac.family_name AS practitioner_full_name,
+            prac.practitioner_id,
+            prac.work_force_id,
+            prac.job_profile_txt,
+            prac.job_role_txt,
+            prac.group_txt,
+            prac.eff_dtm,
+            date(prac.eff_dtm) as wfc_eff_date,
+            date(prac.end_dtm) as wfc_end_date,
+
+            CASE WHEN manager_1 ILIKE '%Natalie%MacKenzie%' OR manager_2 ILIKE '%Natalie%MacKenzie%' OR manager_3 ILIKE '%Natalie%MacKenzie%' OR manager_4 ILIKE '%Natalie%MacKenzie%' OR manager_5 ILIKE '%Natalie%MacKenzie%' OR manager_6 ILIKE '%Natalie%MacKenzie%'
+                     THEN 'Natalie MacKenzie'
+                 WHEN manager_1 ILIKE '%Steven%Avinger%' OR manager_2 ILIKE '%Steven%Avinger%' OR manager_3 ILIKE '%Steven%Avinger%' OR manager_4 ILIKE '%Steven%Avinger%' OR manager_5 ILIKE '%Steven%Avinger%' OR manager_6 ILIKE '%Steven%Avinger%'
+                     THEN 'Steven Avinger'
+                 WHEN manager_1 ILIKE '%Andrew%Johnson%' OR manager_2 ILIKE '%Andrew%Johnson%' OR manager_3 ILIKE '%Andrew%Johnson%' OR manager_4 ILIKE '%Andrew%Johnson%' OR manager_5 ILIKE '%Andrew%Johnson%' OR manager_6 ILIKE '%Andrew%Johnson%'
+                     THEN 'Andrew Johnson'
+                 WHEN manager_1 ILIKE '%Sandra%Denis-Rodriguez%' OR manager_2 ILIKE '%Sandra%Denis-Rodriguez%' OR manager_3 ILIKE '%Sandra%Denis-Rodriguez%' OR manager_4 ILIKE '%Sandra%Denis-Rodriguez%' OR manager_5 ILIKE '%Sandra%Denis-Rodriguez%' OR manager_6 ILIKE '%Sandra%Denis-Rodriguez%'
+                     THEN 'Sandra Denis-Rodriguez'
+                 WHEN manager_1 ILIKE '%Nicole%Nelson%' OR manager_2 ILIKE '%Nicole%Nelson%' OR manager_3 ILIKE '%Nicole%Nelson%' OR manager_4 ILIKE '%Nicole%Nelson%' OR manager_5 ILIKE '%Nicole%Nelson%' OR manager_6 ILIKE '%Nicole%Nelson%'
+                     THEN 'Nicole Nelson'
+                 WHEN manager_1 ILIKE '%Danielle%Mundondo%' OR manager_2 ILIKE '%Danielle%Mundondo%' OR manager_3 ILIKE '%Danielle%Mundondo%' OR manager_4 ILIKE '%Michael%McShea%' OR manager_5 ILIKE '%Danielle%Mundondo%' OR manager_6 ILIKE '%Danielle%Mundondo%'
+                     THEN 'Danielle Mundondo'
+                 WHEN manager_1 ILIKE '%Jeannette%Fair%' OR manager_2 ILIKE '%Jeannette%Fair%' OR manager_3 ILIKE '%Jeannette%Fair%' OR manager_4 ILIKE '%Jeannette%Fair%' OR manager_5 ILIKE '%Jeannette%Fair%' OR manager_6 ILIKE '%Jeannette%Fair%'
+                     THEN 'Jeannette Fair'
+                 WHEN manager_1 ILIKE '%Brendalee%Maisonet%' OR manager_2 ILIKE '%Brendalee%Maisonet%' OR manager_3 ILIKE '%Brendalee%Maisonet%' OR manager_4 ILIKE '%Brendalee%Maisonet%' OR manager_5 ILIKE '%Brendalee%Maisonet%' OR manager_6 ILIKE '%Brendalee%Maisonet%'
+                     THEN 'Brendalee Maisonet'
+                 WHEN manager_1 ILIKE '%Deidre%Gladden%' OR manager_2 ILIKE '%Deidre%Gladden%' OR manager_3 ILIKE '%Deidre%Gladden%' OR manager_4 ILIKE '%Deidre%Gladden%' OR manager_5 ILIKE '%Deidre%Gladden%' OR manager_6 ILIKE '%Deidre%Gladden%'
+                     THEN 'Deidre Gladden'
+                 WHEN manager_1 ILIKE '%Robert%Marshall%' OR manager_2 ILIKE '%Robert%Marshall%' OR manager_3 ILIKE '%Robert%Marshall%' OR manager_4 ILIKE '%Robert%Marshall%' OR manager_5 ILIKE '%Robert%Marshall%' OR manager_6 ILIKE '%Robert%Marshall%'
+                     THEN 'Robert Marshall'
+                 WHEN manager_1 ILIKE '%Michael%McShea%' OR manager_2 ILIKE '%Michael%McShea%' OR manager_3 ILIKE '%Michael%McShea%' OR manager_4 ILIKE '%Michael%McShea%' OR manager_5 ILIKE '%Michael%McShea%' OR manager_6 ILIKE '%Michael%McShea%'
+                     THEN 'Michael McShea'
+                 WHEN manager_1 ILIKE '%Richard%Hindle%' OR manager_2 ILIKE '%Richard%Hindle%' OR manager_3 ILIKE '%Richard%Hindle%' OR manager_4 ILIKE '%Richard%Hindle%' OR manager_5 ILIKE '%Richard%Hindle%' OR manager_6 ILIKE '%Richard%Hindle%'
+                     THEN 'Rick Hindle'
+                 WHEN manager_1 ILIKE '%Kristen%Bruzek%' OR manager_2 ILIKE '%Kristen%Bruzek%' OR manager_3 ILIKE '%Kristen%Bruzek%' OR manager_4 ILIKE '%Kristen%Bruzek%' OR manager_5 ILIKE '%Kristen%Bruzek%' OR manager_6 ILIKE '%Kristen%Bruzek%'
+                     THEN 'Kristen Bruzek'
+                 WHEN manager_1 ILIKE '%Erin%Hirshorn%' OR manager_2 ILIKE '%Erin%Hirshorn%' OR manager_3 ILIKE '%Erin%Hirshorn%' OR manager_4 ILIKE '%Erin%Hirshorn%' OR manager_5 ILIKE '%Erin%Hirshorn%' OR manager_6 ILIKE '%Erin%Hirshorn%'
+                     THEN 'Erin Hirshorn'
+                 WHEN manager_1 ILIKE '%Nancy%Costlow%' OR manager_2 ILIKE '%Nancy%Costlow%' OR manager_3 ILIKE '%Nancy%Costlow%' OR manager_4 ILIKE '%Nancy%Costlow%' OR manager_5 ILIKE '%Nancy%Costlow%' OR manager_6 ILIKE '%Nancy%Costlow%'
+                     THEN 'Nancy Costlow'
+                 WHEN manager_1 ILIKE '%Patience%Jackson%' OR manager_2 ILIKE '%Patience%Jackson%' OR manager_3 ILIKE '%Patience%Jackson%' OR manager_4 ILIKE '%Patience%Jackson%' OR manager_5 ILIKE '%Patience%Jackson%' OR manager_6 ILIKE '%Patience%Jackson%'
+                     THEN 'Patience Jackson'
+                 WHEN manager_1 ILIKE '%April%Ries%' OR manager_2 ILIKE '%April%Ries%' OR manager_3 ILIKE '%April%Ries%' OR manager_4 ILIKE '%April%Ries%' OR manager_5 ILIKE '%April%Ries%' OR manager_6 ILIKE '%April%Ries%'
+                     THEN 'April Ries'
+                 WHEN manager_1 ILIKE '%Amber%Miller%' OR manager_2 ILIKE '%Amber%Miller%' OR manager_3 ILIKE '%Amber%Miller%' OR manager_4 ILIKE '%Amber%Miller%' OR manager_5 ILIKE '%Amber%Miller%' OR manager_6 ILIKE '%Amber%Miller%'
+                     THEN 'April Ries'
+                 WHEN manager_1 ILIKE '%Kate%Rollins%' OR manager_2 ILIKE '%Kate%Rollins%' OR manager_3 ILIKE '%Kate%Rollins%' OR manager_4 ILIKE '%Kate%Rollins%' OR manager_5 ILIKE '%Kate%Rollins%' OR manager_6 ILIKE '%Kate%Rollins%'
+                     THEN 'Kate Rollins'
+                 WHEN manager_1 ILIKE '%Shantanu%Nundy%' OR manager_2 ILIKE '%Shantanu%Nundy%' OR manager_3 ILIKE '%Shantanu%Nundy%' OR manager_4 ILIKE '%Shantanu%Nundy%' OR manager_5 ILIKE '%Shantanu%Nundy%' OR manager_6 ILIKE '%Shantanu%Nundy%'
+                     THEN 'Shantanu Nundy'
+                 ELSE 'Other/None'
+                END
+                as Team_prac,
+
+            CASE WHEN manager_1 ILIKE '%Alyse%Eklund%' OR manager_2 ILIKE '%Alyse%Eklund%' OR manager_3 ILIKE '%Alyse%Eklund%' OR manager_4 ILIKE '%Alyse%Eklund%' OR manager_5 ILIKE '%Alyse%Eklund%' OR manager_6 ILIKE '%Alyse%Eklund%'
+                     THEN 'Alyse Eklund (CCM + TOC Very High Risk)'
+                 WHEN manager_1 ILIKE '%Lisa%Bryson%' OR manager_2 ILIKE '%Lisa%Bryson%' OR manager_3 ILIKE '%Lisa%Bryson%' OR manager_4 ILIKE '%Lisa%Bryson%' OR manager_5 ILIKE '%Lisa%Bryson%' OR manager_6 ILIKE '%Lisa%Bryson%'
+                     THEN 'Lisa Bryson (TOC High Risk+ RR + MSK)'
+                 WHEN manager_1 ILIKE '%Erin%Donahue%' OR manager_2 ILIKE '%Erin%Donahue%' OR manager_3 ILIKE '%Erin%Donahue%' OR manager_4 ILIKE '%Erin%Donahue%' OR manager_5 ILIKE '%Erin%Donahue%' OR manager_6 ILIKE '%Erin%Donahue%'
+                     THEN 'Erin Donahue (CCM Oncology)'
+                 ELSE 'Other/None'
+                end as sub_team,
+
+            CASE WHEN (Team_prac = 'Kristen Bruzek' OR Team_prac = 'Andrew Johnson' OR Team_prac = 'Natalie MacKenzie' OR Team_prac = 'Steven Avinger' OR Team_prac = 'Jeannette Fair' OR Team_prac = 'Sandra Denis-Rodriguez' OR Team_prac = 'Brendalee Maisonet')
+                     THEN 'HA'
+                 WHEN (Team_prac = 'Kate Rollins' OR Team_prac = 'Nancy Costlow' OR Team_prac = 'Patience Jackson' OR Team_prac = 'Erin Hirshorn' OR Team_prac = 'Shantanu Nundy')
+                     THEN 'CHA'
+                 ELSE 'Other/None'
+                END as team_bucket_prac
+
+    FROM #practitioners_new prac
+             left join info_layer.dim_date dim_date on prac.full_date = dim_date.full_date
+);
+
+SQL
+DROP TABLE IF EXISTS #practitioners_new;
+SQL
+
+
+
+DROP TABLE IF EXISTS #enctr_new;
+SQL
+CREATE TABLE #enctr_new AS
+WITH enctr_fix AS(
+    SELECT phone_call_id, enctr_id,
+           CASE WHEN enctr_id = 'NA' then 0 ELSE 1 END as rank,
+           row_number() over (partition by phone_call_id order by rank desc, pc.seg_talk_tm desc) as rn
+    FROM info_layer.phone_call_engmnt_dtl PC
+    WHERE PC.utc_period >= 202201)
+SELECT * FROM enctr_fix where rn = 1;
+
+
+
+SQL
+DROP TABLE IF EXISTS #calls;
+SQL
+CREATE TABLE #calls AS
+Select pc.*,
+       UPPER(NVL(ngi.covg_id,pc.drvd_mbrshp_covrg_id)) as new_covg_id,
+       NVL(ef.enctr_id, pc.enctr_id) as new_enctr_id,
+       w.team_bucket_prac as call_team_bucket,
+       w.Team_prac as call_team,
+       w.practitioner_full_name as call_prac,
+       w.practitioner_first_name as call_prac_first_name,
+       w.practitioner_last_name as call_prac_last_name,
+       w.job_role_txt as call_job_role,
+       case when phone_call_talk_tm > 10 and pc.drvd_comm_result <> 'Left Message' and call_category not like '%Voicemail%' then 1 else 0 end as successful_call,
+
+       CASE WHEN PC.drvd_pc_comm_id is null then PC.related_call_id else PC.drvd_pc_comm_id end as comm_id_v2,
+       comm_id_v2 || '-' || PC.phone_call_direction || '-' || date_trunc('minute', PC.utc_call_start_dtm) || '-' || new_covg_id as new_comm_id,
+       row_number() over (partition by new_comm_id order by PC.phone_call_talk_tm desc) as rn
+
+FROM info_layer.phone_call_engmnt_dtl pc
+         left join #workers w on w.practitioner_id = pc.drvd_practitioner_id and w.date = pc.utc_call_start_dtm::date
+         left join (
+                    select distinct mc.drvd_comm_id,
+                                    upper(mc.drvd_mbrshp_covrg_id) as covg_id
+                    from info_layer.mstr_comm mc
+                    where mc.drvd_mbrshp_covrg_id is not null
+                      and mc.utc_period >= 202201
+                    ) ngi on ngi.drvd_comm_id = pc.drvd_pc_comm_id
+         left join #enctr_new ef on ef.phone_call_id = pc.phone_call_id
+WHERE ((PC.phone_call_direction = 'Inbound' AND NOT (PC.phone_call_talk_tm = 0 AND PC.phone_Call_hold_tm = 0 AND PC.drvd_phone_call_ans_tm = 0 AND PC.phone_call_menu_tm = 0 AND PC.phone_Call_wrap_tm = 0))
+    OR (PC.phone_call_direction = 'Internal')
+    OR (PC.phone_call_direction = 'Outbound' AND NOT (PC.drvd_practitioner_id = 'NA' AND (PC.phone_call_talk_tm = 0 AND PC.phone_Call_hold_tm = 0 AND PC.drvd_phone_call_ans_tm = 0 AND PC.phone_call_menu_tm = 0 AND PC.phone_Call_wrap_tm = 0)))
+    OR (PC.phone_call_direction = 'Callback' AND NOT (PC.drvd_practitioner_id = 'NA' AND (PC.phone_call_talk_tm = 0 AND PC.phone_Call_hold_tm = 0 AND PC.drvd_phone_call_ans_tm = 0 AND PC.phone_call_menu_tm = 0 AND PC.phone_Call_wrap_tm = 0))))
+  and pc.person_id NOT IN ('provider','employer', 'vendor', 'ben-admin', 'health-plan', 'accolade', 'non-member','NA')
+  and pc.drvd_practitioner_id <> 'NA'
+  and pc.utc_period >= 202201;
+
+
+SQL
+DROP TABLE IF EXISTS #mesg_id_data;
+SQL
+CREATE TABLE #mesg_id_data AS
+select drvd_mesg_comm_id as mesg_comm_id,
+       count(distinct mesg_id) as mesg_id_cnt,
+       count(distinct case when w.team_bucket_prac = 'HA' then mesg_id end) as ha_mesg_cnt,
+       count(distinct case when w.team_bucket_prac = 'CHA' then mesg_id end) as cha_mesg_cnt
+from info_layer.mesg_engmnt_dtl mesg
+         left join #workers w on mesg.practitioner_id = w.practitioner_id and w.date = mesg.utc_sentat_dtm::date
+where automated_flg = 'false'
+  and utc_period >= 202201
+group by mesg_comm_id;
+
+SQL
+
+DROP TABLE IF EXISTS #clin_funnel_comm;
+SQL
+CREATE TABLE #clin_funnel_comm AS
+WITH comm_dedupe as (
+    select distinct identification_id, drvd_comm_id, drvd_comm_result, reached_flg, comm_type,
+           est_comm_start_dtm::date as comm_start_date, est_comm_end_dtm::date as comm_end_date,
+           datediff('seconds',est_comm_start_dtm,est_comm_end_dtm) as comm_time
+    from info_layer.v1_uat_clinical_funnel_comm_dtl cfc
+    )
+select cfc.identification_id as cfc_id,
+       count(distinct case when cfc.drvd_comm_result IN ('READ','UNREAD') then cfc.drvd_comm_id end) as cfc_mesg_comm_count,
+       count(distinct case when cfc.drvd_comm_result IN ('READ','UNREAD') and cfc.reached_flg = 'true' then cfc.drvd_comm_id end) as cfc_mesg_comm_reached_count,
+       SUM(distinct case when cfc.drvd_comm_result IN ('READ','UNREAD') then cfc.comm_time end) as cfc_mesg_comm_time,
+
+       count(distinct case when cfc.drvd_comm_result IN ('READ','UNREAD') and comm_type = 'initial' then cfc.drvd_comm_id end) as cfc_mesg_comm_count_before_enroll,
+       count(distinct case when cfc.drvd_comm_result IN ('READ','UNREAD') and cfc.reached_flg = 'true' and comm_type = 'initial' then cfc.drvd_comm_id end) as cfc_mesg_comm_reached_count_before_enroll,
+       SUM(distinct case when cfc.drvd_comm_result IN ('READ','UNREAD') and comm_type = 'initial' then cfc.comm_time end) as cfc_mesg_comm_time_before_enroll,
+
+       count(distinct case when cfc.drvd_comm_result IN ('READ','UNREAD') and comm_type = 'followup' then cfc.drvd_comm_id end) as cfc_mesg_comm_count_after_enroll,
+       count(distinct case when cfc.drvd_comm_result IN ('READ','UNREAD') and cfc.reached_flg = 'true' and comm_type = 'followup' then cfc.drvd_comm_id end) as cfc_mesg_comm_reached_count_after_enroll,
+       SUM(distinct case when cfc.drvd_comm_result IN ('READ','UNREAD') and comm_type = 'followup' then cfc.comm_time end) as cfc_mesg_comm_time_after_enroll,
+
+       sum(mic.mesg_id_cnt) as mesg_id_cnt,
+       sum(mic.ha_mesg_cnt) as ha_mesg_cnt,
+       sum(mic.cha_mesg_cnt) as cha_mesg_cnt,
+
+       sum(case when comm_type = 'initial' then mesg_id_cnt end) as mesg_id_cnt_before_enroll,
+       sum(case when comm_type = 'initial' then ha_mesg_cnt end) as ha_mesg_id_cnt_before_enroll,
+       sum(case when comm_type = 'initial' then cha_mesg_cnt end) as cha_mesg_id_cnt_before_enroll,
+
+       sum(case when comm_type = 'followup' then mesg_id_cnt end) as mesg_id_cnt_after_enroll,
+       sum(case when comm_type = 'followup' then ha_mesg_cnt end) as ha_mesg_id_cnt_after_enroll,
+       sum(case when comm_type = 'followup' then cha_mesg_cnt end) as cha_mesg_id_cnt_after_enroll,
+
+       count(distinct case when cfc.drvd_comm_result NOT IN ('READ','UNREAD') then cfc.drvd_comm_id end) as cfc_call_count,
+       count(distinct case when cfc.drvd_comm_result NOT IN ('READ','UNREAD') and cfc.reached_flg = 'true' then cfc.drvd_comm_id end) as cfc_call_reached_count,
+       SUM(distinct case when cfc.drvd_comm_result NOT IN ('READ','UNREAD') then cfc.comm_time end) as cfc_call_time,
+
+       sum(cfc.comm_time) as total_comm_time,
+       MAX(case when cfc.reached_flg = 'true' then 1 else 0 end) as cfc_reached_ind,
+       MAX(case when cfc.reached_flg = 'true' and cfc.drvd_comm_result NOT IN ('READ','UNREAD') then 1 else 0 end) as cfc_call_reached_ind,
+       MAX(case when cfc.reached_flg = 'true' and cfc.drvd_comm_result IN ('READ','UNREAD') then 1 else 0 end) as cfc_mesg_reached_ind
+
+from comm_dedupe cfc
+left join #mesg_id_data mic on mic.mesg_comm_id = cfc.drvd_comm_id and cfc.drvd_comm_result IN ('READ','UNREAD')
+group by identification_id;
+SQL
+
+
+
+DROP TABLE IF EXISTS #test_case;
+SQL
+CREATE TABLE #test_case AS
+select upper(drvd_mbrshp_covrg_id) as mbr_covg_id,
+       max(empid) as emp_id,
+       max(subscriber_emp_id) as sub_emp_id,
+       max(prs.full_nm) as mbr_nm,
+       max(org_nm) as mbr_org_nm,
+       max(case when (empid is null and subscriber_emp_id is null and subscriber_ssn is null and carrier_nm is null) OR full_nm ilike 'Member%' then 1 else 0 end) as test_mbr_ind
+from info_layer.prs_mbrshp_covrg prs
+where utc_period >= 202201 and acp_mbr_flg = 1
+group by drvd_mbrshp_covrg_id;
+SQL
+
+
+
+DROP TABLE IF EXISTS #hcc_mbr;
+SQL
+CREATE TABLE #hcc_mbr AS
+select distinct mba.drvd_mbrshp_covrg_id, mba.adjudication_svc_year,
+                max(case when sytd_total_paid_amt >= 200000 then 1 else 0 end) as hcc_200k_ind,
+                max(case when sytd_total_paid_amt >= 100000 then 1 else 0 end) as hcc_100k_ind,
+                max(case when sytd_total_paid_amt >= 50000 then 1 else 0 end) as hcc_50k_ind,
+                max(case when hcc_flg = 'true' then 1 else 0 end) as hcc_ind
+from info_layer.v1_uat_svc_ytd_mbr_clms_agg mba
+where hcc_flg='true'
+  and mba.adjudication_svc_year >= 2022
+group by drvd_mbrshp_covrg_id, adjudication_svc_year;
+SQL
+
+
+
+DROP TABLE IF EXISTS #jiva;
+SQL
+CREATE TABLE #jiva AS
+SELECT DISTINCT jvme.enc_idn, to_char(jvme.episode_start_dtm,'YYYYMM') AS period,
+                jvme.assigned_user, jvme.assigned_user_idn,
+                jvme.episode_start_dtm,
+                jvme.episode_end_dtm,
+                jvme.episode_status,
+                jvme.program,
+                CASE WHEN jvme.program ILIKE 'complex case management%' THEN 'Complex Case Management'
+                     WHEN jvme.program ILIKE 'transition care%' THEN 'Transition Care'
+                     ELSE jvme.program END AS program_title_group1,
+                CASE WHEN jvme.program ILIKE 'complex case management%' OR jvme.program ILIKE 'transition care%' THEN 'Complex Case Management'
+                     ELSE jvme.program END AS program_title_group2,
+                jvmeph.program_curr_start_dtm,
+                jvme.status_change_reason,
+                --MAX(CASE WHEN jvmp.problem_ctgy ILIKE 'Interdisciplinary Care Team Consult' AND problem in ('Accolade Pharmacist Consult','Accolade Pharmacy Technician Consult') THEN 1 ELSE 0 END) AS pharmacy_consult_ind,
+                MIN(CASE WHEN jvmeph.curr_program_reason_description ILIKE 'Identified' THEN jvmeph.src_updated_dtm END) AS Identified_dtm,
+                MIN(CASE WHEN jvmeph.curr_program_reason_description ILIKE 'Assigned' THEN jvmeph.src_updated_dtm END) AS Assigned_dtm,
+                MIN(CASE WHEN jvmeph.curr_program_reason_description ILIKE 'Outreach in Progress' THEN jvmeph.src_updated_dtm END) AS Outreach_in_Progress_dtm,
+                MIN(CASE WHEN jvmeph.curr_program_reason_description ILIKE 'Enrolled' THEN jvmeph.src_updated_dtm END) AS Enrolled_dtm,
+                MIN(CASE WHEN jvmeph.curr_program_reason_description ILIKE 'Participating' THEN jvmeph.src_updated_dtm END) AS Participating_dtm,
+                MIN(CASE WHEN jvmeph.curr_program_reason_description ILIKE 'Closed' THEN jvmeph.src_updated_dtm END) AS Closed_dtm,
+
+                MAX(CASE WHEN jvmeph.curr_program_reason_description ILIKE 'Identified' THEN 1 ELSE 0 END)              AS Identified,
+                MAX(CASE WHEN jvmeph.curr_program_reason_description ILIKE 'Assigned' THEN 1 ELSE 0 END)                AS Assigned,
+                MAX(CASE WHEN jvmeph.curr_program_reason_description ILIKE 'Outreach in Progress' THEN 1 ELSE 0 END)    AS Outreach_in_Progress,
+                MAX(CASE WHEN jvmeph.curr_program_reason_description ILIKE 'Enrolled' THEN 1 ELSE 0 END)                AS Enrolled,
+                MAX(CASE WHEN jvmeph.curr_program_reason_description ILIKE 'Participating' THEN 1 ELSE 0 END)           AS Participating,
+                MAX(CASE WHEN jvmeph.curr_program_reason_description ILIKE 'Closed' THEN 1 ELSE 0 END)                  AS Closed
+
+FROM edw.jiva_v_model_episodes jvme
+         LEFT JOIN edw.jiva_v_model_episode_program_hist jvmeph ON jvme.enc_idn = jvmeph.enc_idn
+
+WHERE jvme.episode_start_dtm::date >= '2023-08-01'
+
+GROUP BY 1,2,3,4,5,6,7,8,jvme.assigned_user_idn,jvmeph.program_curr_start_dtm,jvme.status_change_reason;
+SQL
+
+
+DROP TABLE IF EXISTS #jiva_assigned_user;
+SQL
+CREATE TABLE #jiva_assigned_user AS
+SELECT *
+FROM(SELECT me.enc_idn, me.curr_assigned_nurse_idn, me.curr_assigned_nurse, NVL(w2.practitioner_id, w1.practitioner_id) AS practitioner_id, laiwf.work_force_id,
+            NVL(w2.Team_prac,w1.Team_prac,'Other/None') as user_team, NVL(w2.team_bucket_prac,w1.team_bucket_prac,'Other/None') as user_team_bucket,
+            NVL(w2.sub_team,w1.sub_team,'Other/None') as user_sub_team, NVL(w2.manager_1,w1.manager_1) as user_manager_1, NVL(w2.manager_2,w1.manager_2) as user_manager_2,
+            w2.practitioner_full_name as w2_name, w1.practitioner_full_name as w1_name,
+            row_number() over (partition by me.enc_idn, me.curr_assigned_nurse_idn order by laiwf.id_start_dtm desc) as rn
+     FROM edw.jiva_v_model_episode_program_hist me
+              LEFT JOIN edw.lnk_alt_id_work_force laiwf
+                        ON laiwf.id_value = me.curr_assigned_nurse_idn AND
+                           me.src_updated_dtm BETWEEN laiwf.id_start_dtm AND coalesce(laiwf.id_end_dtm, getdate())
+                            AND laiwf.id_sys = 'https://zeomega.com/jiva-uat-user-idn'
+              LEFT JOIN #workers w1 on w1.work_force_id = laiwf.work_force_id and w1.date = me.src_updated_dtm::date
+              LEFT JOIN #workers w2
+                        ON UPPER(split_part(me.curr_assigned_nurse,', ',1)) = UPPER(w2.practitioner_last_name)
+                            AND UPPER(split_part(me.curr_assigned_nurse,', ',2)) = UPPER(w2.practitioner_first_name)
+                            and w2.date = me.src_updated_dtm::date
+     WHERE NVL(w2.practitioner_id, w1.practitioner_id) IS NOT NULL --and enc_idn = 5287
+    ) sub
+where sub.rn=1;
+SQL
+
+
+DROP TABLE IF EXISTS #original_assigned_user;
+SQL
+CREATE TABLE #original_assigned_user AS
+SELECT DISTINCT enc_idn, orig_assigned_nurse AS original_assigned_nurse, orig_assigned_nurse_idn AS original_assigned_nurse_idn, orig_practitioner_id AS original_practitioner_id,
+                orig_assigned_nurse_team, orig_assigned_nurse_team_bucket
+FROM (
+         SELECT DISTINCT jvmeph.enc_idn,jvmeph.curr_assigned_nurse,jvmeph.curr_assigned_nurse_idn,jau.practitioner_id,
+                         first_value(jau.practitioner_id ignore nulls) over (partition by jvmeph.enc_idn order by src_updated_dtm rows between unbounded preceding and unbounded following) as orig_practitioner_id,
+                         first_value(jau.curr_assigned_nurse_idn ignore nulls) over (partition by jvmeph.enc_idn order by src_updated_dtm rows between unbounded preceding and unbounded following) as orig_assigned_nurse_idn,
+                         first_value(jau.curr_assigned_nurse ignore nulls) over (partition by jvmeph.enc_idn order by src_updated_dtm rows between unbounded preceding and unbounded following) as orig_assigned_nurse,
+                         first_value(jau.user_team ignore nulls) over (partition by jvmeph.enc_idn order by src_updated_dtm rows between unbounded preceding and unbounded following) as orig_assigned_nurse_team,
+                         first_value(jau.user_team_bucket ignore nulls) over (partition by jvmeph.enc_idn order by src_updated_dtm rows between unbounded preceding and unbounded following) as orig_assigned_nurse_team_bucket
+
+         FROM edw.jiva_v_model_episode_program_hist jvmeph
+                  LEFT JOIN #jiva_assigned_user jau ON jvmeph.curr_assigned_nurse_idn = jau.curr_assigned_nurse_idn and jvmeph.enc_idn = jau.enc_idn
+         --where jvmeph.enc_idn = 5287 order by src_updated_dtm
+     ) sub
+;
+
+SQL
+DROP TABLE IF EXISTS #PGI_Start;
+SQL
+CREATE TABLE #PGI_Start AS
+select je.enc_idn,
+       MAX(case when NVL(probs.enc_idn, goals.goal_idn, int.poc_intrv_idn) is not null then 1 else 0 end) as POC_ind,
+       MIN(LEAST(probs.problem_dtm::date, goals.added_dtm::date, int.intervention_start_dtm::date)) as PGI_started_dtm,
+       CASE
+           WHEN PGI_started_dtm IS NOT NULL THEN 1
+           ELSE 0
+           END AS PGI_started_ind,
+
+       GREATEST(count(DISTINCT probs.problem_idn),count(DISTINCT goals.goal_idn)) as PGI_started_cnt,
+
+       MAX(case when intervention = 'Document the Clear Triage Output.' and int.intervention_status = 'Closed' then 1 else 0 end) as clear_triage_intervention_closed_ind,
+       COUNT(DISTINCT case when intervention = 'Document the Clear Triage Output.' and int.intervention_status = 'Closed' then poc_intrv_idn end) as clear_triage_intervention_closed_count,
+       MIN(case when intervention = 'Document the Clear Triage Output.' and int.intervention_status = 'Closed' then intervention_end_dtm::date end) as clear_triage_intervention_closed_date,
+
+       MAX(case when intervention IN ('Complete the Accolade Pharmacy Technician consult.','Complete the Accolade Pharmacist consult.','Complete the Accolade Pharmacist referral.','Complete the Accolade Pharmacy Technician referral.')
+           and int.intervention_status = 'Closed' then 1 else 0 end) as pharmacy_intervention_closed_ind,
+       COUNT(DISTINCT case when intervention IN ('Complete the Accolade Pharmacy Technician consult.','Complete the Accolade Pharmacist consult.','Complete the Accolade Pharmacist referral.','Complete the Accolade Pharmacy Technician referral.')
+           and int.intervention_status = 'Closed' then poc_intrv_idn end) as pharmacy_intervention_closed_count,
+       MIN(case when intervention IN ('Complete the Accolade Pharmacy Technician consult.','Complete the Accolade Pharmacist consult.','Complete the Accolade Pharmacist referral.','Complete the Accolade Pharmacy Technician referral.')
+           and int.intervention_status = 'Closed' then intervention_end_dtm::date end) as pharmacy_intervention_closed_date,
+
+       MAX(case when intervention IN ('Complete the Accolade Social Worker consult.','Complete the Accolade Social Worker referral.') and int.intervention_status = 'Closed' then 1 else 0 end) as social_work_intervention_closed_ind,
+       COUNT(DISTINCT case when intervention IN ('Complete the Accolade Social Worker consult.','Complete the Accolade Social Worker referral.') and int.intervention_status = 'Closed' then poc_intrv_idn end) as social_work_intervention_closed_count,
+       MIN(case when intervention IN ('Complete the Accolade Social Worker consult.','Complete the Accolade Social Worker referral.') and int.intervention_status = 'Closed' then intervention_end_dtm::date end) as social_work_intervention_closed_date,
+
+       MAX(case when intervention IN ('Complete the Accolade Registered Dietitian consult.','Complete the Accolade Registered Dietitian referral.') and int.intervention_status = 'Closed' then 1 else 0 end) as dietitian_intervention_closed_ind,
+       COUNT(DISTINCT case when intervention IN ('Complete the Accolade Registered Dietitian consult.','Complete the Accolade Registered Dietitian referral.') and int.intervention_status = 'Closed' then poc_intrv_idn end) as dietitian_intervention_closed_count,
+       MIN(case when intervention IN ('Complete the Accolade Registered Dietitian consult.','Complete the Accolade Registered Dietitian referral.') and int.intervention_status = 'Closed' then intervention_end_dtm::date end) as dietitian_intervention_closed_date
+
+
+from edw.jiva_v_model_episodes je
+         left join edw.jiva_v_model_problems probs on je.enc_idn = probs.enc_idn
+         left join edw.jiva_v_model_goals goals on goals.enc_idn = je.enc_idn
+         left join edw.jiva_v_model_interventions int on int.enc_idn = je.enc_idn
+group by je.enc_idn;
+SQL
+
+
+DROP TABLE IF EXISTS #PGI_Complete;
+SQL
+CREATE TABLE #PGI_Complete AS
+select je.enc_idn,
+
+       count(distinct probs.problem_idn) as prob_cnt,
+       count(distinct case when probs.problem_status IN ('Closed','Void') then probs.problem_idn end) as finished_prob,
+       count(distinct case when probs.problem_status IN ('Pend','Open') then probs.problem_idn end) as not_finished_prob,
+
+       count(distinct goals.goal_idn) as goal_cnt,
+       count(distinct case when goals.goal_status IN ('Closed','Void') then goals.goal_idn end) as finished_goals,
+       count(distinct case when goals.goal_status IN ('Pend','Open') then goals.goal_idn end) as not_finished_goals,
+
+       count(distinct int.poc_intrv_idn) as int_cnt,
+       count(distinct case when int.intervention_status IN ('Closed','Void') then int.poc_intrv_idn end) as finished_int,
+       count(distinct case when int.intervention_status IN ('Pend','Open') then int.poc_intrv_idn end) as not_finished_int,
+
+       min(case when int.intervention_status = 'Closed' then int.intervention_start_dtm::date end) as first_intrv_start_dtm,
+
+       MIN(case when probs.problem_status = 'Closed' AND goals.goal_status = 'Closed' and int.intervention_status = 'Closed' then problem_dtm::date end) as first_PGI_completed_dtm,
+
+       CASE
+           WHEN first_PGI_completed_dtm IS NOT NULL THEN 1
+           ELSE 0
+           END AS PGI_completed_ind,
+
+       GREATEST(COUNT(DISTINCT case when probs.problem_status = 'Closed' AND goals.goal_status = 'Closed' and int.intervention_status = 'Closed' then probs.problem_idn end),
+                COUNT(DISTINCT case when probs.problem_status = 'Closed' AND goals.goal_status = 'Closed' and int.intervention_status = 'Closed' then goals.goal_idn end)) as PGI_completed_cnt,
+
+       case when prob_cnt > 0 AND prob_cnt = finished_prob and goal_cnt > 0 and goal_cnt = finished_goals and int_cnt > 0 and int_cnt = finished_int then 1 else 0 end as all_PGI_complete_ind
+
+from edw.jiva_v_model_episodes je
+         left join edw.jiva_v_model_problems probs on je.enc_idn = probs.enc_idn
+         left join edw.jiva_v_model_goals goals on goals.problem_idn = probs.problem_idn
+         left join edw.jiva_v_model_interventions int on int.problem_idn = probs.problem_idn
+group by je.enc_idn;
+SQL
+
+
+DROP TABLE IF EXISTS #first_initial_asmnt;
+SQL
+CREATE TABLE #first_initial_asmnt AS
+SELECT enc_idn, title as first_initial_asmnt_title, total_questions AS first_initial_asmnt_total_qstn, completed_questions AS first_initial_asmnt_completed_qstn,
+       ace_dtm AS first_initial_asmnt_added_dtm, ace_status AS first_initial_asmnt_status,
+       CASE WHEN first_initial_asmnt_title IS NOT NULL THEN 1 ELSE 0 END first_initial_asmnt_ind
+FROM (
+         SELECT DISTINCT enc_idn, title,ace_status, total_questions, completed_questions, ace_dtm, ROW_NUMBER() OVER (PARTITION BY enc_idn, title ORDER BY ace_dtm) rn
+         FROM edw.jiva_v_model_episode_assessments
+         WHERE (title ILIKE '%Initial Assessment%' OR title ILIKE '%Post-Discharge Assessment')
+           AND title NOT ILIKE 'StayWell Rx%'
+         --AND ace_status <> 'Void'
+     ) sub
+WHERE rn=1;
+SQL
+
+DROP TABLE IF EXISTS #first_followup_asmnt;
+SQL
+CREATE TABLE #first_followup_asmnt AS
+SELECT enc_idn, title as first_followup_asmnt_title, total_questions AS first_followup_asmnt_total_qstn, completed_questions AS first_followup_asmnt_completed_qstn,
+       ace_dtm as first_followup_asmnt_added_dtm, ace_status AS first_followup_asmnt_status,
+       CASE WHEN first_followup_asmnt_title IS NOT NULL THEN 1 ELSE 0 END AS first_followup_asmnt_ind
+FROM (
+         SELECT DISTINCT enc_idn, title, ace_status, total_questions, completed_questions, ace_dtm, ROW_NUMBER() OVER (PARTITION BY enc_idn, title ORDER BY ace_dtm) rn
+         FROM edw.jiva_v_model_episode_assessments
+         WHERE title ILIKE '%Follow-Up Assessment%'
+         --AND ace_status <> 'Void'
+     ) sub
+WHERE rn=1;
+
+SQL
+DROP TABLE IF EXISTS #first_initial_asmnt_qstn;
+SQL
+CREATE TABLE #first_initial_asmnt_qstn AS
+SELECT enc_idn, title AS first_initial_asmnt_title, added_dtm AS first_initial_asmnt_qstn_dtm,
+       CASE WHEN first_initial_asmnt_qstn_dtm IS NOT NULL THEN 1 ELSE 0 END AS first_initial_asmnt_qstn_ind
+FROM (
+         SELECT ea.enc_idn,
+                ea.title,
+                ar.added_dtm,
+                ROW_NUMBER() OVER (PARTITION BY ar.ace_entity_idn ORDER BY ar.added_dtm) rn
+         FROM edw.jiva_v_model_episode_assmt_results ar
+                  INNER JOIN edw.jiva_v_model_episode_assessments ea
+                             ON ar.ace_entity_idn = ea.ace_entity_idn
+         WHERE (ea.title ILIKE '%Initial Assessment%' OR ea.title ILIKE '%Post-Discharge Assessment')
+           AND ea.title NOT ILIKE 'StayWell Rx%'
+     ) sub
+WHERE rn=1;
+SQL
+
+DROP TABLE IF EXISTS #first_followup_asmnt_qstn;
+SQL
+CREATE TABLE #first_followup_asmnt_qstn AS
+SELECT enc_idn, title AS first_followup_asmnt_title, added_dtm AS first_followup_asmnt_qstn_dtm,
+       CASE WHEN first_followup_asmnt_qstn_dtm IS NOT NULL THEN 1 ELSE 0 END AS first_followup_asmnt_qstn_ind
+FROM (
+         SELECT ea.enc_idn,
+                ea.title,
+                ar.added_dtm,
+                ROW_NUMBER() OVER (PARTITION BY ar.ace_entity_idn ORDER BY ar.added_dtm) rn
+         FROM edw.jiva_v_model_episode_assmt_results ar
+                  INNER JOIN edw.jiva_v_model_episode_assessments ea
+                             ON ar.ace_entity_idn = ea.ace_entity_idn
+         WHERE ea.title ILIKE '%Follow-Up Assessment%'
+     ) sub
+WHERE rn=1;
+SQL
+
+
+
+DROP TABLE IF EXISTS #jiva_grouped;
+SQL
+CREATE TABLE #jiva_grouped AS
+
+SELECT  DISTINCT
+    je.enc_idn, period,
+    MAX(UPPER(cp.drvd_mbrshp_covrg_id)) as jiva_covg_id,
+    MAX(UPPER(tc.mbr_org_nm)) as jiva_org_nm,
+    MAX(jau.practitioner_id) as current_assigned_practitioner_id,
+    MAX(je.assigned_user) as current_assigned_user,
+    MAX(NVL(jau.user_team,'Other/None')) as current_assigned_user_team,
+    MAX(NVL(jau.user_team_bucket,'Other/None')) as current_assigned_user_team_bucket,
+    MAX(NVL(jau.user_sub_team,'Other/None')) as current_assigned_user_sub_team,
+    MAX(NVL(jau.user_manager_1,'Other/None')) as current_assigned_user_manager_1,
+    MAX(NVL(jau.user_manager_2,'Other/None')) as current_assigned_user_manager_2,
+    MAX(original_practitioner_id) as original_practitioner_id,
+    MAX(original_assigned_nurse) as original_assigned_nurse,
+    MAX(orig_assigned_nurse_team) as original_assigned_nurse_team,
+    MAX(orig_assigned_nurse_team_bucket) as original_assigned_nurse_team_team_bucket,
+    MAX(program) as curr_program_title,
+    MAX(program_title_group1) AS curr_program_title_group1,
+    MAX(program_title_group2) AS curr_program_title_group2,
+    MAX(episode_status) as episode_status,
+
+    MIN(episode_start_dtm::date) as episode_start_datetime,
+    min(Identified_dtm::date) as identified_datetime_strict,
+    MIN(LEAST(episode_start_dtm::date, Identified_dtm::date)) as identified_datetime,
+    MIN(NVL(je.Assigned_dtm::date, je.Outreach_in_Progress_dtm::date, je.Enrolled_dtm::date, first_initial_asmnt_qstn_dtm::date)) as assigned_date,
+    MIN(NVL(je.Outreach_in_Progress_dtm::date, je.Enrolled_dtm::date, first_initial_asmnt_qstn_dtm::date)) as outreach_date,
+    MIN(NVL(je.Enrolled_dtm::date, first_initial_asmnt_qstn_dtm::date)) as enroll_datetime,
+    MIN(first_initial_asmnt_qstn_dtm::date) as first_initial_asmnt_qstn_started_date,
+    MAX(first_initial_asmnt_qstn_ind) as first_initial_asmnt_qstn_ind,
+    MIN(PGI_started_dtm::date) as PGI_started_datetime,
+    MIN(first_intrv_start_dtm::date) AS first_intrv_start_dtm,
+    MIN(first_PGI_completed_dtm::date) as first_PGI_completed_datetime,
+    MIN(date_part('year', first_PGI_completed_dtm::date) || lpad(date_part('month', first_PGI_completed_dtm::date),2,0)) as PGI_completed_period,
+    MIN(NVL(Participating_dtm::date, first_followup_asmnt_qstn_dtm::date)) as participating_date,
+    MIN(first_followup_asmnt_qstn_dtm::date) as first_followup_asmnt_qstn_started_datetime,
+    MAX(first_followup_asmnt_qstn_ind) as first_followup_asmnt_qstn_ind,
+    MIN(NVL(je.closed_dtm::date,episode_end_dtm::date)) as closed_date,
+    MIN(date_part('year', NVL(je.closed_dtm::date,episode_end_dtm::date)) || lpad(date_part('month', NVL(je.closed_dtm::date,episode_end_dtm::date)),2,0)) as closed_period,
+    ROUND((closed_date::date - identified_datetime::date + 1)*(5.0/7.0),0) AS episode_TAT_start_end_days,
+    ROUND((closed_date::date - Enroll_datetime::date + 1)*(5.0/7.0),0) AS episode_TAT_enroll_close_days,
+    ROUND((closed_date::date - first_initial_asmnt_qstn_started_date::date + 1)*(5.0/7.0),0) AS episode_TAT_intial_asmnt_close_days,
+    ROUND((Enroll_datetime::date - identified_datetime::date + 1)*(5.0/7.0),0) AS episode_TAT_identify_enroll_days,
+    ROUND((PGI_started_datetime::date - Enroll_datetime::date + 1)*(5.0/7.0),0) AS episode_TAT_enroll_pgi_start_days,
+    ROUND((first_PGI_completed_datetime::date - PGI_started_datetime::date + 1)*(5.0/7.0),0) AS episode_TAT_pgi_start_pgi_complete_days,
+    ROUND((NVL(participating_date::date, closed_date::date) - first_PGI_completed_datetime::date + 1)*(5.0/7.0),0) AS episode_TAT_pgi_complete_participate_or_close_days,
+
+    max(case when LEAST(episode_start_dtm, Identified_dtm) is not null then 1 else 0 end) as jiva_identified_ind,
+    MAX(case when NVL(je.Assigned_dtm::date, je.Outreach_in_Progress_dtm::date, je.Enrolled_dtm::date, first_initial_asmnt_qstn_dtm::date) is not null then 1 else 0 end) as jiva_assigned_ind,
+    MAX(case when NVL(je.Outreach_in_Progress_dtm::date, je.Enrolled_dtm::date, first_initial_asmnt_qstn_dtm::date) is not null then 1 else 0 end) as jiva_outreach_ind,
+    MAX(CASE WHEN NVL(je.Enrolled_dtm,first_initial_asmnt_qstn_dtm,PGI_started_dtm,Participating_dtm,first_followup_asmnt_added_dtm,first_followup_asmnt_qstn_dtm) IS NOT NULL THEN 1 ELSE 0 END) as jiva_enrollment_ind,
+    MAX(CASE WHEN NVL(Participating_dtm,first_followup_asmnt_added_dtm,first_followup_asmnt_qstn_dtm) IS NOT NULL THEN 1 ELSE 0 END) as jiva_participting_ind,
+    max(case when NVL(je.closed_dtm,episode_end_dtm) is not null then 1 else 0 end) as jiva_closed_ind,
+
+    MAX(POC_ind) as PGI_ind,
+    MAX(PGI_completed_ind) as PGI_completed_ind,
+    MAX(PGI_started_ind) as PGI_started_ind,
+    MAX(PGI_started_cnt) as PGI_started_cnt,
+    MAX(PGI_completed_cnt) as PGI_completed_cnt,
+    max(all_PGI_complete_ind) as all_PGI_complete_ind,
+    max(NVL(clear_triage_intervention_closed_ind,0)) as clear_triage_ind,
+    max(NVL(pharmacy_intervention_closed_ind,0)) as pharmacy_ind,
+    max(NVL(social_work_intervention_closed_ind,0)) as social_worker_ind,
+    max(NVL(dietitian_intervention_closed_ind,0)) as dietitian_ind,
+    MAX(status_change_reason) as status_change_reason,
+    MAX(case when status_change_reason = 'Graduated' then 1 else 0 end) as graduated_ind,
+
+    MAX(first_initial_asmnt_ind) as initial_asmnt_ind,
+    MAX(first_initial_asmnt_status) as initial_asmnt_status,
+    MIN(first_initial_asmnt_added_dtm::date) as initial_asmnt_added_dtm,
+    MAX(first_initial_asmnt_completed_qstn) as initial_asmnt_completed_qstn,
+    MAX(first_initial_asmnt_total_qstn) as initial_asmnt_total_qstn,
+    MAX(first_followup_asmnt_ind) as followup_asmnt_ind,
+    MAX(first_followup_asmnt_status) as followup_asmnt_status,
+    MIN(first_followup_asmnt_added_dtm::date) as followup_asmnt_dtm,
+    MAX(first_followup_asmnt_completed_qstn) as followup_asmnt_completed_qstn,
+    MAX(first_followup_asmnt_total_qstn) as followup_asmnt_total_qstn
+
+FROM #jiva je
+         LEFT JOIN #PGI_Complete pgic on pgic.enc_idn = je.enc_idn
+         LEFT JOIN #PGI_Start pgis on pgis.enc_idn = je.enc_idn
+         LEFT JOIN #first_initial_asmnt fia ON fia.enc_idn = je.enc_idn
+         LEFT JOIN #first_followup_asmnt ffa ON ffa.enc_idn = je.enc_idn
+         LEFT JOIN #first_initial_asmnt_qstn fiaq ON fiaq.enc_idn = fia.enc_idn AND fia.first_initial_asmnt_title = fiaq.first_initial_asmnt_title
+         LEFT JOIN #first_followup_asmnt_qstn ffaq ON ffaq.enc_idn = ffa.enc_idn AND ffaq.first_followup_asmnt_title = ffa.first_followup_asmnt_title
+         LEFT JOIN #original_assigned_user oau ON oau.enc_idn = je.enc_idn
+         LEFT JOIN #jiva_assigned_user jau ON jau.curr_assigned_nurse_idn = je.assigned_user_idn and jau.enc_idn = je.enc_idn
+         left join edw.lnk_care_pln_alt_id lcai on cast(lcai.alt_id_val as varchar) = cast(je.enc_idn as varchar)
+         left join info_layer.v1_uat_care_pln_dtl cp on cp.care_pln_id = lcai.care_pln_id
+         LEFT JOIN #test_case tc on UPPER(tc.mbr_covg_id) = UPPER(cp.drvd_mbrshp_covrg_id)
+
+where NVL(tc.test_mbr_ind,0) = 0
+GROUP BY 1,2
+ORDER BY 2,1;
+SQL
+
+
+
+DROP TABLE IF EXISTS #cpd;
+SQL
+CREATE TABLE #cpd AS
+select cpd.care_pln_id as cpd_id,
+       MIN(CASE WHEN (care_pln_title IN ('Conditions Care','Symptoms Care','Wellness Care','Preventive Care', 'Care Navigation') OR categ_cd IN ('conditions-care','preventive-care','symptoms-care','wellness-care','navigation')) AND (enrolled_start_dtm is not null or participating_start_dtm is not null or graduation_flg = 1) AND ad.assessment_nm IS NOT NULL AND categ_context_cd ILIKE 'clinical' THEN ad.est_authored_on_dtm END) AS Navigation_clinic_intev_ind,
+       MIN(CASE WHEN (care_pln_title IN ('Care Programs- Case Management','Complex Case Management: Adult','Complex Case Management: Behavioral Health','Complex Case Management: High-Risk Maternity','Complex Case Management: NICU','Complex Case Management: Oncology','Complex Case Management: Pediatric') OR categ_cd IN ('ccm-adult','ccm-behavioral','ccm-high-risk-maternity','ccm-nicu','ccm-oncology','ccm-pediatric')) AND (enrolled_start_dtm is not null or participating_start_dtm is not null or graduation_flg = 1) AND ad.assessment_nm IS NOT NULL AND categ_context_cd ILIKE 'clinical' THEN ad.est_authored_on_dtm END) AS cm_clinic_intev_ind,
+       MIN(CASE WHEN (care_pln_title IN ('Pediatric Transition Care: High Risk','Transition Care: Adult','Transition Care: High Risk','Transition Care: Pediatric') OR categ_cd IN ('transition-care-adult','transition-care-high-risk','transition-care-pediatric','pediatric-transition-care-high-risk')) AND (enrolled_start_dtm is not null or participating_start_dtm is not null or graduation_flg = 1) AND ad.assessment_nm IS NOT NULL AND categ_context_cd ILIKE 'clinical' THEN ad.est_authored_on_dtm END) AS TOC_clinic_intev_ind,
+       MIN(CASE WHEN (categ_cd = 'care-program-erx' OR care_pln_title IN ('Care Program: Enhanced RX', 'Care Programs- Enhanced Pharmacy')) AND (enrolled_start_dtm is not null or participating_start_dtm is not null or graduation_flg = 1) AND ad.assessment_nm IS NOT NULL AND categ_context_cd ILIKE 'clinical' THEN ad.est_authored_on_dtm END) AS erx_clinic_intev_ind,
+       MIN(CASE WHEN (care_pln_title IN ('Care Programs- Maternity Management', 'Maternity Care') OR categ_cd IN ('care-program-maternity', 'maternity')) AND (enrolled_start_dtm is not null or participating_start_dtm is not null or graduation_flg = 1) AND ad.assessment_nm IS NOT NULL AND categ_context_cd ILIKE 'clinical' THEN ad.est_authored_on_dtm END) AS Maternity_clinic_intev_ind,
+       MIN(CASE WHEN (care_pln_title IN ('MSK','Musculoskeletal Care') OR categ_cd IN ('msk')) AND (enrolled_start_dtm is not null or participating_start_dtm is not null or graduation_flg = 1) AND ad.assessment_nm IS NOT NULL AND categ_context_cd ILIKE 'clinical' THEN ad.est_authored_on_dtm END) AS MSK_clinic_intev_ind,
+       MIN(CASE WHEN (care_pln_title IN ('Accolade Care') OR categ_cd IN ('accolade-care')) AND (enrolled_start_dtm is not null or participating_start_dtm is not null or graduation_flg = 1) AND ad.assessment_nm IS NOT NULL AND categ_context_cd ILIKE 'clinical' THEN ad.est_authored_on_dtm END) AS AccoladeCare_clinic_intev_ind,
+       MIN(CASE WHEN (care_pln_title IN ('Mental Health Integrated Care') OR categ_cd IN ('mhic')) AND (enrolled_start_dtm is not null or participating_start_dtm is not null or graduation_flg = 1) AND ad.assessment_nm IS NOT NULL AND categ_context_cd ILIKE 'clinical' THEN ad.est_authored_on_dtm END) AS MHIC_clinic_intev_ind,
+       MIN(CASE WHEN (care_pln_title IN ('Rising Risk Care') OR categ_cd IN ('rising-risk','rising-risk-care')) AND (enrolled_start_dtm is not null or participating_start_dtm is not null or graduation_flg = 1) AND ad.assessment_nm IS NOT NULL AND categ_context_cd ILIKE 'clinical' THEN ad.est_authored_on_dtm END) AS RR_clinic_intev_ind,
+       DATE(LEAST(Navigation_clinic_intev_ind, cm_clinic_intev_ind, TOC_clinic_intev_ind, erx_clinic_intev_ind, Maternity_clinic_intev_ind, MSK_clinic_intev_ind, AccoladeCare_clinic_intev_ind, MHIC_clinic_intev_ind, RR_clinic_intev_ind)) as cpd_asmnt_started_dt,
+
+       MIN(CASE WHEN (care_pln_title IN ('Conditions Care','Symptoms Care','Wellness Care','Preventive Care', 'Care Navigation') OR categ_cd IN ('conditions-care','preventive-care','symptoms-care','wellness-care','navigation')) AND (enrolled_start_dtm is not null or participating_start_dtm is not null or graduation_flg = 1) AND ad.assessment_nm IS NOT NULL AND categ_context_cd ILIKE 'clinical' AND ad.status IN ('completed') THEN ad.est_authored_on_dtm END) AS Navigation_clinic_intev_ind1,
+       MIN(CASE WHEN (care_pln_title IN ('Care Programs- Case Management','Complex Case Management: Adult','Complex Case Management: Behavioral Health','Complex Case Management: High-Risk Maternity','Complex Case Management: NICU','Complex Case Management: Oncology','Complex Case Management: Pediatric') OR categ_cd IN ('ccm-adult','ccm-behavioral','ccm-high-risk-maternity','ccm-nicu','ccm-oncology','ccm-pediatric')) AND (enrolled_start_dtm is not null or participating_start_dtm is not null or graduation_flg = 1) AND ad.assessment_nm IS NOT NULL AND categ_context_cd ILIKE 'clinical' AND ad.status IN ('completed') THEN ad.est_authored_on_dtm END) AS cm_clinic_intev_ind1,
+       MIN(CASE WHEN (care_pln_title IN ('Pediatric Transition Care: High Risk','Transition Care: Adult','Transition Care: High Risk','Transition Care: Pediatric') OR categ_cd IN ('transition-care-adult','transition-care-high-risk','transition-care-pediatric','pediatric-transition-care-high-risk')) AND (enrolled_start_dtm is not null or participating_start_dtm is not null or graduation_flg = 1) AND ad.assessment_nm IS NOT NULL AND categ_context_cd ILIKE 'clinical' AND ad.status IN ('completed') THEN ad.est_authored_on_dtm END) AS TOC_clinic_intev_ind1,
+       MIN(CASE WHEN (categ_cd = 'care-program-erx' OR care_pln_title IN ('Care Program: Enhanced RX', 'Care Programs- Enhanced Pharmacy')) AND (enrolled_start_dtm is not null or participating_start_dtm is not null or graduation_flg = 1) AND ad.assessment_nm IS NOT NULL AND categ_context_cd ILIKE 'clinical' AND ad.status IN ('completed') THEN ad.est_authored_on_dtm END) AS erx_clinic_intev_ind1,
+       MIN(CASE WHEN (care_pln_title IN ('Care Programs- Maternity Management', 'Maternity Care') OR categ_cd IN ('care-program-maternity', 'maternity')) AND (enrolled_start_dtm is not null or participating_start_dtm is not null or graduation_flg = 1) AND ad.assessment_nm IS NOT NULL AND categ_context_cd ILIKE 'clinical' AND ad.status IN ('completed') THEN ad.est_authored_on_dtm END) AS Maternity_clinic_intev_ind1,
+       MIN(CASE WHEN (care_pln_title IN ('MSK','Musculoskeletal Care') OR categ_cd IN ('msk')) AND (enrolled_start_dtm is not null or participating_start_dtm is not null or graduation_flg = 1) AND ad.assessment_nm IS NOT NULL AND categ_context_cd ILIKE 'clinical' AND ad.status IN ('completed') THEN ad.est_authored_on_dtm END) AS MSK_clinic_intev_ind1,
+       MIN(CASE WHEN (care_pln_title IN ('Accolade Care') OR categ_cd IN ('accolade-care')) AND (enrolled_start_dtm is not null or participating_start_dtm is not null or graduation_flg = 1) AND ad.assessment_nm IS NOT NULL AND categ_context_cd ILIKE 'clinical' AND ad.status IN ('completed') THEN ad.est_authored_on_dtm END) AS AccoladeCare_clinic_intev_ind1,
+       MIN(CASE WHEN (care_pln_title IN ('Mental Health Integrated Care') OR categ_cd IN ('mhic')) AND (enrolled_start_dtm is not null or participating_start_dtm is not null or graduation_flg = 1) AND ad.assessment_nm IS NOT NULL AND categ_context_cd ILIKE 'clinical' AND ad.status IN ('completed') THEN ad.est_authored_on_dtm END) AS MHIC_clinic_intev_ind1,
+       MIN(CASE WHEN (care_pln_title IN ('Rising Risk Care') OR categ_cd IN ('rising-risk','rising-risk-care')) AND (enrolled_start_dtm is not null or participating_start_dtm is not null or graduation_flg = 1) AND ad.assessment_nm IS NOT NULL AND categ_context_cd ILIKE 'clinical' AND ad.status IN ('completed') THEN ad.est_authored_on_dtm END) AS RR_clinic_intev_ind1,
+       DATE(LEAST(Navigation_clinic_intev_ind1, cm_clinic_intev_ind1, TOC_clinic_intev_ind1, erx_clinic_intev_ind1, Maternity_clinic_intev_ind1, MSK_clinic_intev_ind1, AccoladeCare_clinic_intev_ind1, MHIC_clinic_intev_ind1, RR_clinic_intev_ind1)) as cpd_asmnt_completed_dt
+
+FROM info_layer.v1_uat_care_pln_dtl cpd
+         INNER JOIN info_layer.prs_mbrshp_covrg pmc ON pmc.utc_period = cpd.utc_period AND upper(pmc.drvd_mbrshp_covrg_id) = upper(cpd.drvd_mbrshp_covrg_id)
+         LEFT JOIN info_layer.v1_uat_vw_care_pln_action cpa ON cpa.care_pln_id = cpd.care_pln_id
+         LEFT JOIN info_layer.assessment_dtl ad ON cpd.person_id = ad.person_id AND cpd.utc_period = ad.utc_period AND ad.status <> 'entered-in-error'
+WHERE cpd.care_pln_sts <> 'entered-in-error'
+  and ad.utc_period >= 202201
+GROUP BY cpd.care_pln_id;
+SQL
+
+
+DROP TABLE IF EXISTS #cp_funnel;
+SQL
+CREATE TABLE #cp_funnel AS
+WITH cf as (
+    select UPPER(cf.drvd_mbrshp_covrg_id) as cpf_covg_id, cf.person_id, cf.utc_period as strat_period,
+           cf.pgrm_nm as strat_pgrm_old,
+           case
+               when pgrm_nm ilike '%pharm%' then 'Pharmacy'
+               when pgrm_nm ilike '%case%manage%' then 'Complex Case Management'
+               when pgrm_nm ilike '%maternity%' then 'Maternity Care'
+               when pgrm_nm ilike '%transition%' then 'Transition Care'
+               when pgrm_nm ilike '%rising%' then 'Rising Risk Care'
+               when pgrm_nm ilike '%mhic%' then 'MHIC'
+               when pgrm_nm ilike '%msk%' then 'Musculoskeletal Care'
+               when pgrm_nm ilike '%navigation%' then 'Care Navigation'
+               when pgrm_nm ilike '%condition%care%' then 'Care Navigation'
+               when pgrm_nm ilike '%symptom%care%' then 'Care Navigation'
+               when pgrm_nm ilike '%prevent%care%' then 'Care Navigation'
+               when pgrm_nm ilike '%wellness%care%' then 'Care Navigation'
+               end as strat_pgrm_bucket,
+           cf.org_nm as strat_org_nm,
+           cf.identification_id as iden_id,
+           cf.identification_id_type,
+           cf.identification_type,
+           cf.identification_method,
+           NVL(cf.stratified_dt, cf.identification_dt)  as stratified_date,
+           NVL(cf.identification_dt, cp.enrolled_start_dtm::date, cf.enrolled_dtm::date) as identification_date,
+           NVL(cp.assigned_start_dtm::date, cf.assigned_dtm::date, cp.outreached_start_dtm::date, cf.outreach_in_progress_dtm::date, cp.enrolled_start_dtm::date, cf.enrolled_dtm::date, cpd.cpd_asmnt_started_dt::date) as cf_assigned_date,
+           NVL(cp.outreached_start_dtm::date, cf.outreach_in_progress_dtm::date, cp.enrolled_start_dtm::date, cf.enrolled_dtm::date, cpd.cpd_asmnt_started_dt::date) as cf_outreach_date,
+           NVL(cp.enrolled_start_dtm::date, cf.enrolled_dtm::date, cpd.cpd_asmnt_started_dt::date, cp.participating_start_dtm::date, cf.participation_dtm::date) as cf_enroll_date,
+           cpd.cpd_asmnt_started_dt,
+           case when cpd.cpd_asmnt_started_dt is not null then 1 else 0 end as cpd_asmnt_started_ind,
+           cpd.cpd_asmnt_completed_dt,
+           case when cpd.cpd_asmnt_completed_dt is not null then 1 else 0 end as cpd_asmnt_completed_ind,
+           lcai.alt_id_val,
+           NVL(cp.participating_start_dtm::date,cf.participation_dtm::date) as cf_participate_date,
+           NVL(cp.closed_dtm::date,cf.closed_dtm::date) as cf_closed_date,
+           cf.care_pln_id,
+           cp.enctr_id, cp.care_pln_title, cp.care_pln_sts, cp.src_created_dtm::date as cp_created_dt, cp.utc_period as cp_create_period,
+           cp.categ_cd, cp.categ_cd_disp, cp.referral_src_disp,
+           NVL(tc.test_mbr_ind,0) as test_ind,
+           case when cp.care_pln_id is not null then 1 else 0 end as cp_connection,
+
+           row_number() over (partition by cf.identification_id order by cf.stratified_dt, cp.src_created_dtm) as rn
+
+    from info_layer.v1_uat_clinical_funnel_dtl cf
+             left join info_layer.v1_uat_care_pln_dtl cp on cp.care_pln_id = cf.care_pln_id
+             left join acp_edw.info_layer.task_dtl task_ident on task_ident.task_id = cf.identification_id and cf.identification_id_type = 'task'
+             left join acp_edw.edw.awareness aware_ident on aware_ident.awareness_id = cf.identification_id and cf.identification_id_type = 'awareness'
+             LEFT JOIN #test_case tc on UPPER(tc.mbr_covg_id) = UPPER(cf.drvd_mbrshp_covrg_id)
+             left join edw.lnk_care_pln_alt_id lcai on UPPER(lcai.care_pln_id) = UPPER(cf.care_pln_id)
+             left join #cpd cpd on UPPER(cpd.cpd_id) = UPPER(cp.care_pln_id)
+    where NVL(curr_careplan_business_sts,'None') <> 'Entered in Error' and NVL(cp.care_pln_sts,'None') <> 'entered-in-error'
+)
+select *
+from cf
+where rn = 1 and test_ind = 0;
+SQL
+
+
+
+DROP TABLE IF EXISTS #cp_final;
+SQL
+CREATE TABLE #cp_final AS
+WITH id AS (
+    select distinct iden_id, cast(cpf.alt_id_val as varchar) as ep_id
+    from #cp_funnel cpf
+    union
+    (select distinct null as iden_id, cast(jg.enc_idn as varchar) as ep_id
+     from #jiva_grouped jg
+     WHERE jg.enc_idn IN (select distinct enc_idn from #jiva_grouped jg left join #cp_funnel cpf on jg.enc_idn = cpf.alt_id_val where alt_id_val is null))
+),
+     id2 as (
+         select distinct iden_id as cpf_join_id, ep_id
+         from id
+     )
+select NVL(iden_id,ep_id) as identification_id,
+       cpf.*,
+       UPPER(NVL(cpf_covg_id,jiva_covg_id)) as cf_covg_id,
+       NVL(hcc.hcc_50k_ind,0) as hcc_50k,
+       NVL(hcc.hcc_100k_ind,0) as hcc_100k,
+       jg.enc_idn as jiva_ep_id,
+       case when enc_idn is not null then 1 else 0 end as jiva_connection,
+       case when (jg.enc_idn is not null and iden_id is null) OR (care_pln_id is not null and NVL(cast(alt_id_val as varchar),cast(jg.enc_idn as varchar)) is null) then 1 else 0 end as data_connection_issue,
+       jg.*,
+       NVL(strat_pgrm_old, jg.curr_program_title) as strat_pgrm,
+       NVL(strat_org_nm,jg.jiva_org_nm) as org_nm,
+       NVL(stratified_date, identified_datetime::date) as stratified_dt,
+       date_part('year', NVL(stratified_date, identified_datetime::date)) || lpad(date_part('month', NVL(stratified_date, identified_datetime::date)),2,0) as stratification_period,
+       case when jiva_connection = 1 then identified_datetime::date else NVL(identification_date::date, identified_datetime::date) end as identification_dt,
+       case when jiva_connection = 1 then jg.assigned_date::date else NVL(cpf.cf_assigned_date::date, jg.assigned_date::date) end as assigned_dt,
+       case when jiva_connection = 1 then jg.outreach_date::date else NVL(cpf.cf_outreach_date::date, jg.outreach_date::date) end as outreach_dt,
+       case when jiva_connection = 1 then enroll_datetime::date else NVL(enroll_datetime::date,cf_enroll_date::date) end as enrolled_datetime,
+       case when jiva_connection = 1 then jg.first_initial_asmnt_qstn_started_date::date else NVL(jg.first_initial_asmnt_qstn_started_date::date,cpf.cpd_asmnt_started_dt) end as first_initial_asmnt_qstn_started_datetime,
+       case when first_initial_asmnt_qstn_started_datetime is not null then 1 else 0 end as initial_asmnt_started_ind_new,
+       case when jiva_connection = 1 then participating_date::date else NVL(participating_date::date,cf_participate_date) end as participating_datetime,
+       case when jiva_connection = 1 then closed_date::date else NVL(closed_date::date,cf_closed_date::date) end as closed_datetime,
+       case when (jiva_connection = 1 and jg.initial_asmnt_status = 'Completed') OR (jiva_connection = 0 and cpf.cpd_asmnt_completed_dt is not null) then 1 else 0 end as initial_asmnt_completed_ind_new,
+
+       case when stratified_dt is not null
+           and NVL(identification_dt, enrolled_datetime,first_initial_asmnt_qstn_started_datetime, PGI_started_datetime,first_pgi_completed_datetime,participating_datetime,first_followup_asmnt_qstn_started_datetime,closed_datetime) is null
+                then 1 else 0 end as inventory_stratified,
+
+       case when stratified_dt is not null and identification_dt is not null and cf_enroll_date is null and participating_datetime is null and closed_datetime is null and jiva_connection = 0
+           then 1 else 0 end as inventory_identified_not_in_jiva,
+
+       case when stratified_dt is not null and identification_dt is not null and cf_enroll_date is not null and participating_datetime is null and closed_datetime is null and jiva_connection = 0
+                then 1 else 0 end as inventory_enrolled_not_in_jiva,
+
+       case when stratified_dt is not null and identification_dt is not null and cf_enroll_date is not null and participating_datetime is not null and closed_datetime is null and jiva_connection = 0
+                then 1 else 0 end as inventory_participated_not_in_jiva,
+
+       case when identification_dt is not null and jiva_connection = 1
+           and NVL(enrolled_datetime,first_initial_asmnt_qstn_started_datetime, PGI_started_datetime,first_pgi_completed_datetime,participating_datetime,first_followup_asmnt_qstn_started_datetime,closed_datetime) is null
+                then 1 else 0 end as inventory_identified,
+
+       case when enrolled_datetime is not null and jiva_connection = 1
+           and NVL(first_initial_asmnt_qstn_started_datetime, PGI_started_datetime,first_pgi_completed_datetime,participating_datetime,first_followup_asmnt_qstn_started_datetime,closed_datetime) is null
+                then 1 else 0 end as inventory_enrolled,
+
+       case when first_initial_asmnt_qstn_started_datetime is not null and jiva_connection = 1
+           and NVL(PGI_started_datetime,first_pgi_completed_datetime,participating_datetime,first_followup_asmnt_qstn_started_datetime,closed_datetime) is null
+                then 1 else 0 end as inventory_initial_asmnt_started,
+
+       case when PGI_started_datetime is not null and jiva_connection = 1
+           and NVL(first_pgi_completed_datetime,participating_datetime,first_followup_asmnt_qstn_started_datetime,closed_datetime) is null
+                then 1 else 0 end as inventory_PGI_started,
+
+       case when first_pgi_completed_datetime is not null and jiva_connection = 1
+           and NVL(participating_datetime,first_followup_asmnt_qstn_started_datetime,closed_datetime) is null
+                then 1 else 0 end as inventory_first_PGI_completed,
+
+       case when participating_datetime is not null and jiva_connection = 1
+           and NVL(first_followup_asmnt_qstn_started_datetime,closed_datetime) is null
+                then 1 else 0 end as inventory_participating,
+
+       case when first_followup_asmnt_qstn_started_datetime is not null and jiva_connection = 1
+           and closed_datetime is null
+                then 1 else 0 end as inventory_follow_up_asmnt_started,
+
+       case when closed_datetime is not null and jiva_connection = 1 then 1 else 0 end as inventory_closed,
+
+       case when (jiva_connection = 1 and episode_status <> 'Hold' and curr_program_title_group1 = 'Transition Care')
+                then (inventory_enrolled + inventory_initial_asmnt_started + inventory_PGI_started + inventory_first_PGI_completed + inventory_participating + inventory_follow_up_asmnt_started)*1.5
+            when (jiva_connection = 1 and episode_status <> 'Hold')
+                then (inventory_enrolled + inventory_initial_asmnt_started + inventory_PGI_started + inventory_first_PGI_completed + inventory_participating + inventory_follow_up_asmnt_started)
+            else 0
+           end as workload
+
+from id2
+         left join #cp_funnel cpf on cpf.iden_id = id2.cpf_join_id
+         left join #jiva_grouped jg on jg.enc_idn = id2.ep_id
+         left join #hcc_mbr hcc on upper(hcc.drvd_mbrshp_covrg_id) = upper(NVL(cpf_covg_id,jiva_covg_id))
+                                       and hcc.adjudication_svc_year = date_part('year',NVL(stratified_date, identified_datetime::date))
+where stratification_period >= 202201;
+SQL
+
+
+DROP TABLE IF EXISTS #comm_reasons;
+SQL
+CREATE TABLE #comm_reasons AS
+select distinct enctr_id, rsn_cd_desc,
+                case
+                    when rsn_cd_desc ilike '%pharm%' OR rsn_cd ilike '%pharm%' then 'Pharmacy'
+                    when rsn_cd_desc ilike '%medicine%' OR rsn_cd ilike '%medicine%' then 'Pharmacy'
+                    when rsn_cd_desc ilike '%medication%' OR rsn_cd ilike '%medication%' then 'Pharmacy'
+                    when rsn_cd_desc ilike '%RX%' OR rsn_cd ilike '%RX%' then 'Pharmacy'
+                    when rsn_cd_desc ilike '%drug%' OR rsn_cd ilike '%drug%' then 'Pharmacy'
+                    when rsn_cd_desc ilike '%transi%' OR rsn_cd ilike '%transi%' then 'Transition Care'
+                    when rsn_cd_desc ilike '%tc-%' OR rsn_cd ilike '%tc-%' then 'Transition Care'
+                    when rsn_cd_desc ilike '%rising%' OR rsn_cd ilike '%rising%' then 'Rising Risk Care'
+                    when rsn_cd_desc ilike 'CM%' OR rsn_cd ilike 'CM%' then 'Complex Case Management'
+                    when rsn_cd_desc ilike '%comorbi%' OR rsn_cd ilike '%comorbid%' then 'Complex Case Management'
+                    when rsn_cd_desc ilike '%multiple%' OR rsn_cd ilike '%multiple%' then 'Complex Case Management'
+                    when rsn_cd_desc ilike '%bh cm%' OR rsn_cd ilike '%bhcm%' then 'Complex Case Management'
+                    when rsn_cd_desc ilike '%case%' OR rsn_cd ilike '%case%' then 'Complex Case Management'
+                    when rsn_cd_desc ilike '%complex%' OR rsn_cd ilike '%complex%' then 'Complex Case Management'
+                    when rsn_cd_desc ilike '%matern%' OR rsn_cd ilike '%matern%' then 'Maternity Care'
+                    when rsn_cd_desc ilike '%women%' OR rsn_cd ilike '%women%' then 'Maternity Care'
+                    when rsn_cd_desc ilike '%navig%' OR rsn_cd ilike '%navig%' then 'Care Navigation'
+                    when rsn_cd_desc ilike '%prevent%care%' OR rsn_cd ilike '%prevent%care%' then 'Care Navigation'
+                    when rsn_cd_desc ilike '%wellness%care%' OR rsn_cd ilike '%wellness%care%' then 'Care Navigation'
+                    when rsn_cd_desc ilike '%condition%care%' OR rsn_cd ilike '%condition%care%' then 'Care Navigation'
+                    when rsn_cd_desc ilike '%cln-%' OR rsn_cd ilike '%cln-%' then 'Care Navigation'
+                    when rsn_cd_desc ilike '%Musc%' OR rsn_cd ilike '%Musc%' then 'Musculoskeletal Care'
+                    when rsn_cd_desc ilike '%MSK%' OR rsn_cd ilike '%MSK%' then 'Musculoskeletal Care'
+                    when rsn_cd_desc ilike 'intake' OR rsn_cd ilike 'intake' then 'General'
+                    when rsn_cd_desc ilike '%consult%' OR rsn_cd ilike '%consult%' then 'General'
+                    when rsn_cd_desc ilike '%hcc%' OR rsn_cd ilike '%hcc%' then 'General'
+                    when rsn_cd_desc ilike '%medical%' OR rsn_cd ilike '%medical%' then 'General'
+                    when rsn_cd_desc ilike '%care%' OR rsn_cd ilike '%care%' then 'General'
+                    when rsn_cd_desc ilike '%general%' OR rsn_cd ilike '%general%' then 'General'
+                    when rsn_cd_desc ilike '%clinical%' OR rsn_cd ilike '%clinical%' then 'General'
+                    when rsn_cd_desc ilike '%nurse%' OR rsn_cd ilike '%nurse%' then 'General'
+                    end as reason_group
+from info_layer.task_dtl
+where task_sts <> 'entered-in-error'
+  and utc_period >= 202201;
+SQL
+
+
+
+DROP TABLE IF EXISTS #jiva_comm;
+SQL
+CREATE TABLE #jiva_comm AS
+WITH calls as (
+    select care.*, cfc.*,
+
+           pc.utc_call_start_dtm::date as call_date, pc.utc_call_start_dtm as call_dtm,
+           pc.drvd_comm_result, pc.phone_call_id, pc.parent_call_id, pc.drvd_pc_comm_id,
+           pc.new_enctr_id as call_enctr_id, pc.phone_call_direction, pc.call_category,
+           pc.call_prac, pc.call_team, pc.call_team_bucket, pc.call_job_role,
+           case when pc.phone_call_talk_tm >= 43200 then 43200 else pc.phone_call_talk_tm end as phone_call_talk_tm,
+           case when pc.phone_call_wrap_tm >= 43200 then 43200 else pc.phone_call_wrap_tm end as phone_call_wrap_tm,
+           case when pc.phone_call_hold_tm >= 43200 then 43200 else pc.phone_call_hold_tm end as phone_call_hold_tm,
+           pc.successful_call,
+           pc.new_comm_id,
+           cra.call_reasons, cr.reason_group as call_reason_group,
+
+           case when (cr.reason_group = care.curr_program_title_group1
+               or cr.reason_group IN ('Pharmacy')
+               OR (pc.call_team_bucket = 'CHA' AND pc.call_team = care.current_assigned_user_team))
+               OR (cr.reason_group = care.strat_pgrm_bucket)
+                    then 1 else 0 end as include_call,
+
+           row_number() over (partition by identification_id, phone_call_id  order by include_call desc) as call_rn,
+
+           case when ((pc.utc_call_start_dtm::date < care.Enrolled_datetime::date)
+               OR (care.Enrolled_datetime is null AND care.Participating_datetime is null AND pc.utc_call_start_dtm::date <= care.closed_datetime::date))
+               OR (phone_call_id is not null and NVL(care.identification_dt::date,care.identified_datetime::date) is null)
+                    then 1 else 0 end as call_before_enroll,
+
+           case when pc.utc_call_start_dtm::date >= care.Enrolled_datetime::date
+               and (
+                         (pc.utc_call_start_dtm::date < care.Participating_datetime::date)
+                             OR (care.Participating_datetime is null AND call_before_enroll = 0 AND pc.utc_call_start_dtm::date <= care.closed_datetime::date)
+                         ) then 1 else 0 end as call_enroll_to_participate,
+
+           case when pc.utc_call_start_dtm::date >= care.Participating_datetime::date
+               OR (phone_call_id is not null and call_before_enroll = 0 and call_enroll_to_participate = 0)
+                    then 1 else 0 end as call_participate_to_close,
+
+
+           case when pc.drvd_practitioner_id = care.current_assigned_practitioner_id then 1 else 0 end as call_with_assigned_nurse,
+           case when pc.call_team = care.current_assigned_user_team OR (pc.call_team = 'Nancy Costlow' and pc.call_job_role ilike '%Pharm%') then 1 else 0 end as call_with_assigned_nurse_team,
+           case when pc.call_team <> care.current_assigned_user_team and (pc.call_team = 'Nancy Costlow' and pc.call_job_role ilike '%Pharm%') then 1 else 0 end as pharm_call,
+
+           first_value(case when include_call = 1
+                                then pc.call_team_bucket end ignore nulls)
+           over (partition by care.identification_id order by pc.utc_call_start_dtm rows between unbounded preceding and unbounded following) as created_by_team_bucket_using_calls,
+
+           first_value(case when include_call = 1
+                                then pc.call_team end ignore nulls)
+           over (partition by care.identification_id order by pc.utc_call_start_dtm rows between unbounded preceding and unbounded following) as created_by_team_using_calls,
+
+           first_value(case when include_call = 1
+                                then pc.phone_call_id end ignore nulls)
+           over (partition by care.identification_id order by pc.utc_call_start_dtm rows between unbounded preceding and unbounded following) as first_call,
+
+           first_value(case when include_call = 1
+                                then pc.utc_call_start_dtm::date end ignore nulls)
+           over (partition by care.identification_id order by pc.utc_call_start_dtm rows between unbounded preceding and unbounded following) as first_call_date,
+
+           first_value(case when successful_call = 1 and include_call = 1
+                                then pc.utc_call_start_dtm::date end ignore nulls)
+           over (partition by care.identification_id order by pc.utc_call_start_dtm rows between unbounded preceding and unbounded following) as first_successful_call_date,
+
+           first_value(case when include_call = 1
+               and pc.call_team_bucket = 'CHA'
+                                then pc.utc_call_start_dtm::date end ignore nulls)
+           over (partition by care.identification_id order by pc.utc_call_start_dtm rows between unbounded preceding and unbounded following) as first_CHA_call_date,
+
+           first_value(case when successful_call = 1 and  include_call = 1
+               and pc.call_team_bucket = 'CHA'
+                                then pc.utc_call_start_dtm::date end ignore nulls)
+           over (partition by care.identification_id order by pc.utc_call_start_dtm rows between unbounded preceding and unbounded following) as first_successful_CHA_call_date,
+
+           first_value(case when successful_call = 1 and include_call = 1
+               and pc.call_team_bucket = 'CHA'
+                                then pc.call_team end ignore nulls)
+           over (partition by care.identification_id order by pc.utc_call_start_dtm rows between unbounded preceding and unbounded following) as first_successful_CHA_call_team
+
+    from #cp_final care
+             left join (SELECT * from #calls WHERE rn = 1) pc
+                       on UPPER(pc.new_covg_id) = UPPER(care.cf_covg_id)
+                           and pc.utc_call_start_dtm::date >= care.stratified_dt::date
+                           and pc.utc_call_start_dtm::date <= LEAST(care.Closed_datetime::date, current_date)
+             left join #comm_reasons cr on cr.enctr_id = pc.new_enctr_id
+             left join (
+                        SELECT pc.phone_call_id as pcid, listagg(distinct cr.rsn_cd_desc || '; ') as call_reasons
+                        from #calls pc
+                                 left join #comm_reasons cr on cr.enctr_id = pc.new_enctr_id
+                        group by pc.phone_call_id
+                    ) cra on cra.pcid = pc.phone_call_id
+             left join #clin_funnel_comm cfc on cfc.cfc_id = care.identification_id
+)
+select *
+from calls
+where call_rn = 1
+;
+SQL
+
+
+
+DROP TABLE IF EXISTS #call_count_fix;
+SQL
+CREATE TABLE #call_count_fix AS
+select phone_call_id as phone_call_id_fix,
+       count(distinct identification_id) as episode_count
+from (select * from #jiva_comm where include_call = 1) sub
+group by phone_call_id;
+
+SQL
+DROP TABLE IF EXISTS #jiva_comm_fix;
+SQL
+CREATE TABLE #jiva_comm_fix AS
+select *,
+       case when NVL(episode_count,0) > 0 then 1.0 / episode_count else 1.0 end as comm_cnt_fix,
+       case when NVL(episode_count,0) > 0 then phone_call_talk_tm*1.0 / episode_count else phone_call_talk_tm*1.0 end as phone_call_talk_tm_fix,
+       case when NVL(episode_count,0) > 0 then phone_call_wrap_tm*1.0 / episode_count else phone_call_wrap_tm*1.0 end as phone_call_wrap_tm_fix,
+       case when NVL(episode_count,0) > 0 then phone_call_hold_tm*1.0 / episode_count else phone_call_hold_tm*1.0 end as phone_call_hold_tm_fix
+from #jiva_comm jc
+         left join #call_count_fix ccf on ccf.phone_call_id_fix = jc.phone_call_id;
+
+
+
+SQL
+DROP TABLE IF EXISTS #episode_grouping_comm;
+SQL
+CREATE TABLE #episode_grouping_comm AS
+select identification_id,
+       MAX(cf_covg_id) as cf_covg_id,
+       MAX(hcc_50k) as hcc_50k,
+       MAX(hcc_100k) as hcc_100k,
+       MAX(person_id) as person_id,
+       MAX(stratification_period) as stratification_period,
+       MAX(strat_pgrm) as strat_pgrm,
+       MAX(strat_pgrm_bucket) as strat_pgrm_bucket,
+       MAX(org_nm) as org_nm,
+       MAX(identification_id_type) as identification_id_type,
+       MAX(identification_type) as identification_type,
+       MAX(identification_method) as identification_method,
+       MAX(referral_src_disp) as referral_src_disp,
+       MAX(stratified_dt) as stratified_dt,
+       MAX(identification_dt) as identification_dt,
+       MAX(data_connection_issue) as data_connection_issue,
+       MAX(care_pln_id) as care_pln_id,
+       MAX(cp_connection) as cp_connection,
+       MAX(enctr_id) as enctr_id,
+       --Episode Metrics
+       max(jiva_ep_id) as jiva_ep_id,
+       MAX(jiva_connection) as jiva_connection,
+       max(jcf.period) as jiva_identified_period,
+       max(current_assigned_practitioner_id) as current_assigned_practitioner_id,
+       max(NVL(current_assigned_user,'Unassigned')) as current_assigned_user,
+       max(current_assigned_user_team) as current_assigned_user_team,
+       max(current_assigned_user_team_bucket) as current_assigned_user_team_bucket,
+       max(current_assigned_user_sub_team) as current_assigned_user_sub_team,
+       max(jcf.current_assigned_user_manager_1) as current_assigned_user_manager_1,
+       max(jcf.current_assigned_user_manager_2) as current_assigned_user_manager_2,
+       max(original_practitioner_id) as original_practitioner_id,
+       max(original_assigned_nurse) as original_assigned_user,
+       max(original_assigned_nurse_team) as original_assigned_user_team,
+       max(original_assigned_nurse_team_team_bucket) as original_assigned_user_team_bucket,
+       max(curr_program_title) as curr_program_title,
+       max(curr_program_title_group1) as curr_program_title_group1,
+       max(curr_program_title_group2) as curr_program_title_group2,
+       max(episode_status) as episode_status,
+       max(episode_start_datetime) as episode_start_datetime,
+       max(identified_datetime_strict) as identified_datetime_strict,
+       max(identified_datetime) as identified_datetime,
+       max(assigned_dt) as assigned_datetime,
+       max(outreach_dt) as outreach_datetime,
+       max(enrolled_datetime) as enrolled_datetime,
+       max(first_initial_asmnt_qstn_started_datetime) as first_initial_asmnt_qstn_started_datetime,
+       max(first_initial_asmnt_qstn_ind) as first_initial_asmnt_qstn_ind,
+       max(pgi_started_datetime) as pgi_started_datetime,
+       max(first_intrv_start_dtm) as first_intrv_start_dtm,
+       max(first_pgi_completed_datetime) as first_pgi_completed_datetime,
+       max(PGI_completed_period) as PGI_completed_period,
+       max(participating_datetime) as participating_datetime,
+       max(first_followup_asmnt_qstn_started_datetime) as first_followup_asmnt_qstn_started_datetime,
+       max(first_followup_asmnt_qstn_ind) as first_followup_asmnt_qstn_ind,
+       max(closed_datetime) as closed_datetime,
+       max(closed_period) as closed_period,
+
+       max(episode_tat_start_end_days) as episode_tat_start_end_days,
+       max(episode_tat_enroll_close_days) as episode_tat_enroll_close_days,
+       max(episode_tat_intial_asmnt_close_days) as episode_tat_intial_asmnt_close_days,
+       max(episode_TAT_identify_enroll_days) as episode_TAT_identify_enroll_days,
+       max(episode_TAT_enroll_pgi_start_days) as episode_TAT_enroll_pgi_start_days,
+       max(episode_TAT_pgi_start_pgi_complete_days) as episode_TAT_pgi_start_pgi_complete_days,
+       max(episode_TAT_pgi_complete_participate_or_close_days) as episode_TAT_pgi_complete_participate_or_close_days,
+
+       max(case when jiva_identified_ind = 1 OR identification_dt is not null then 1 else 0 end) as identified_ind,
+       MAX(case when jiva_assigned_ind = 1 or assigned_dt is not null then 1 else 0 end) as assigned_ind,
+       MAX(case when jiva_outreach_ind = 1 or outreach_dt is not null then 1 else 0 end) as outreach_ind,
+       max(case when jiva_enrollment_ind = 1 OR enrolled_datetime is not null then 1 else 0 end) as enrollment_ind,
+       max(NVL(initial_asmnt_started_ind_new,0)) as initial_asmnt_started_ind,
+       max(case when jiva_participting_ind = 1 OR participating_datetime is not null then 1 else 0 end) as participting_ind,
+       max(case when jiva_closed_ind = 1 OR closed_datetime is not null then 1 else 0 end) as closed_ind,
+       MAX(graduated_ind) as graduated_ind,
+       max(pgi_ind) as pgi_ind,
+       max(pgi_completed_ind) as pgi_completed_ind,
+       max(pgi_started_ind) as pgi_started_ind,
+       MAX(PGI_started_cnt) as PGI_started_cnt,
+       max(pgi_completed_cnt) as pgi_completed_cnt,
+       max(all_PGI_complete_ind) as all_PGI_complete_ind,
+       max(clear_triage_ind) as clear_triage_ind,
+       max(pharmacy_ind) as pharmacy_ind,
+       max(social_worker_ind) as social_worker_ind,
+       max(dietitian_ind) as dietitian_ind,
+       max(status_change_reason) as status_change_reason,
+       max(initial_asmnt_ind) as initial_asmnt_ind,
+       max(initial_asmnt_status) as initial_asmnt_status,
+       max(initial_asmnt_added_dtm) as initial_asmnt_added_dtm,
+       max(initial_asmnt_completed_qstn) as initial_asmnt_completed_qstn,
+       max(initial_asmnt_completed_ind_new) as initial_asmnt_completed_ind,
+       max(initial_asmnt_total_qstn) as initial_asmnt_total_qstn,
+       max(followup_asmnt_ind) as followup_asmnt_ind,
+       max(followup_asmnt_status) as followup_asmnt_status,
+       max(followup_asmnt_dtm) as followup_asmnt_dtm,
+       max(followup_asmnt_completed_qstn) as followup_asmnt_completed_qstn,
+       max(followup_asmnt_total_qstn) as followup_asmnt_total_qstn,
+
+       MAX(inventory_stratified) as inventory_stratified,
+       MAX(inventory_identified_not_in_jiva) as inventory_identified_not_in_jiva,
+       MAX(inventory_enrolled_not_in_jiva) as inventory_enrolled_not_in_jiva,
+       MAX(inventory_participated_not_in_jiva) as inventory_participated_not_in_jiva,
+       MAX(inventory_identified) as inventory_identified,
+       MAX(inventory_enrolled) as inventory_enrolled,
+       MAX(inventory_initial_asmnt_started) as inventory_initial_asmnt_started,
+       MAX(inventory_PGI_started) as inventory_PGI_started,
+       MAX(inventory_first_PGI_completed) as inventory_first_PGI_completed,
+       MAX(inventory_participating) as inventory_participating,
+       MAX(inventory_follow_up_asmnt_started) as inventory_follow_up_asmnt_started,
+       MAX(workload) as workload,
+       MAX(inventory_closed) as inventory_closed,
+
+       --Call Metrics
+       MIN(first_CHA_call_date) as first_CHA_call_date,
+       max(case when first_CHA_call_date is not null then 1 else 0 end) as cha_call_ind,
+       MIN(first_successful_CHA_call_date) as first_successful_CHA_call_date,
+       max(case when first_successful_CHA_call_date is not null then 1 else 0 end) as cha_successful_call_ind,
+       MIN(first_call_date) as first_call_date,
+       max(case when first_call_date is not null then 1 else 0 end) as call_ind,
+       MIN(NVL(first_successful_call_date,enrolled_datetime)) as first_successful_call_date,
+       max(case when NVL(first_successful_call_date,enrolled_datetime) is not null then 1 else 0 end) as successful_call_ind,
+       min(created_by_team_bucket_using_calls) as first_call_team_bucket,
+       min(created_by_team_using_calls) as first_call_team,
+       MAX(case when identification_dt is not null AND (first_call_date is not null or cfc_call_count > 0 or cfc_mesg_comm_count > 0 or enrolled_datetime is not null or outreach_dt is not null) then 1 else 0 end) as contact_ind,
+       MAX(case when identification_dt is not null AND (first_successful_call_date is not null or cfc_reached_ind = 1 or enrolled_datetime is not null) then 1 else 0 end) as reached_ind,
+       MAX(case when phone_call_id is not null or cfc_call_count > 0 or cfc_mesg_comm_count > 0 or cfc_reached_ind = 1 or outreach_dt is not null then 1 else 0 end) as member_comm_exists,
+
+       sum(case when include_call = 1 and call_before_enroll = 1 then comm_cnt_fix end) as call_count_before_enrolled,
+       sum(case when include_call = 1 and call_before_enroll = 1 and call_team_bucket = 'HA' then comm_cnt_fix end) as call_count_HA_before_enrolled,
+       sum(case when include_call = 1 and call_before_enroll = 1 and call_team_bucket = 'CHA' then comm_cnt_fix end) as call_count_CHA_before_enrolled,
+       sum(case when include_call = 1 and call_before_enroll = 1 then phone_call_talk_tm_fix + phone_call_hold_tm_fix end) as talk_tm_before_enrolled,
+       sum(case when include_call = 1 and call_before_enroll = 1 and call_team_bucket = 'HA'  then phone_call_talk_tm_fix + phone_call_hold_tm_fix end) as talk_tm_HA_before_enrolled,
+       sum(case when include_call = 1 and call_before_enroll = 1 and call_team_bucket = 'CHA'  then phone_call_talk_tm_fix + phone_call_hold_tm_fix end) as talk_tm_CHA_before_enrolled,
+       sum(case when include_call = 1 and call_before_enroll = 1 then phone_call_wrap_tm_fix end) as wrap_tm_before_enrolled,
+       sum(case when include_call = 1 and call_before_enroll = 1 and call_team_bucket = 'HA'  then phone_call_wrap_tm_fix end) as wrap_tm_HA_before_enrolled,
+       sum(case when include_call = 1 and call_before_enroll = 1 and call_team_bucket = 'CHA'  then phone_call_wrap_tm_fix end) as wrap_tm_CHA_before_enrolled,
+
+       sum(case when include_call = 1 and call_enroll_to_participate = 1 then comm_cnt_fix end) as call_count_enroll_to_participate,
+       sum(case when include_call = 1 and call_enroll_to_participate = 1 and call_team_bucket = 'HA' then comm_cnt_fix end) as call_count_HA_enroll_to_participate,
+       sum(case when include_call = 1 and call_enroll_to_participate = 1 and call_team_bucket = 'CHA' then comm_cnt_fix end) as call_count_CHA_enroll_to_participate,
+       sum(case when include_call = 1 and call_enroll_to_participate = 1 then phone_call_talk_tm_fix + phone_call_hold_tm_fix end) as talk_tm_enroll_to_participate,
+       sum(case when include_call = 1 and call_enroll_to_participate = 1 and call_team_bucket = 'HA' then phone_call_talk_tm_fix + phone_call_hold_tm_fix end) as talk_tm_HA_enroll_to_participate,
+       sum(case when include_call = 1 and call_enroll_to_participate = 1 and call_team_bucket = 'CHA' then phone_call_talk_tm_fix + phone_call_hold_tm_fix end) as talk_tm_CHA_enroll_to_participate,
+       sum(case when include_call = 1 and call_enroll_to_participate = 1 then phone_call_wrap_tm_fix end) as wrap_tm_enroll_to_participate,
+       sum(case when include_call = 1 and call_enroll_to_participate = 1 and call_team_bucket = 'HA' then phone_call_wrap_tm_fix end) as wrap_tm_HA_enroll_to_participate,
+       sum(case when include_call = 1 and call_enroll_to_participate = 1 and call_team_bucket = 'CHA' then phone_call_wrap_tm_fix end) as wrap_tm_CHA_enroll_to_participate,
+
+       sum(case when include_call = 1 and call_participate_to_close = 1 then comm_cnt_fix end) as call_count_participate_to_close,
+       sum(case when include_call = 1 and call_participate_to_close = 1 and call_team_bucket = 'HA' then comm_cnt_fix end) as call_count_HA_participate_to_close,
+       sum(case when include_call = 1 and call_participate_to_close = 1 and call_team_bucket = 'CHA' then comm_cnt_fix end) as call_count_CHA_participate_to_close,
+       sum(case when include_call = 1 and call_participate_to_close = 1 then phone_call_talk_tm_fix + phone_call_hold_tm_fix end) as talk_tm_participate_to_close,
+       sum(case when include_call = 1 and call_participate_to_close = 1 and call_team_bucket = 'HA' then phone_call_talk_tm_fix + phone_call_hold_tm_fix end) as talk_tm_HA_participate_to_close,
+       sum(case when include_call = 1 and call_participate_to_close = 1 and call_team_bucket = 'CHA' then phone_call_talk_tm_fix + phone_call_hold_tm_fix end) as talk_tm_CHA_participate_to_close,
+       sum(case when include_call = 1 and call_participate_to_close = 1 then phone_call_wrap_tm_fix end) as wrap_tm_participate_to_close,
+       sum(case when include_call = 1 and call_participate_to_close = 1 and call_team_bucket = 'HA' then phone_call_wrap_tm_fix end) as wrap_tm_HA_participate_to_close,
+       sum(case when include_call = 1 and call_participate_to_close = 1 and call_team_bucket = 'CHA' then phone_call_wrap_tm_fix end) as wrap_tm_CHA_participate_to_close,
+
+
+
+       sum(case when include_call = 1 and call_before_enroll = 1 and call_with_assigned_nurse = 1 then comm_cnt_fix end) as call_count_before_enrolled_with_assigned_nurse,
+       sum(case when include_call = 1 and call_before_enroll = 1 and call_with_assigned_nurse = 1 then phone_call_talk_tm_fix + phone_call_hold_tm_fix end) as talk_tm_before_enrolled_with_assigned_nurse,
+       sum(case when include_call = 1 and call_before_enroll = 1 and call_with_assigned_nurse = 1 then phone_call_wrap_tm_fix end) as wrap_tm_before_enrolled_with_assigned_nurse,
+
+       sum(case when include_call = 1 and call_enroll_to_participate = 1 and call_with_assigned_nurse = 1 then comm_cnt_fix end) as call_count_enroll_to_participate_with_assigned_nurse,
+       sum(case when include_call = 1 and call_enroll_to_participate = 1 and call_with_assigned_nurse = 1 then phone_call_talk_tm_fix + phone_call_hold_tm_fix end) as talk_tm_enroll_to_participate_with_assigned_nurse,
+       sum(case when include_call = 1 and call_enroll_to_participate = 1 and call_with_assigned_nurse = 1 then phone_call_wrap_tm_fix end) as wrap_tm_enroll_to_participate_with_assigned_nurse,
+
+       sum(case when include_call = 1 and call_participate_to_close = 1 and call_with_assigned_nurse = 1 then comm_cnt_fix end) as call_count_participate_to_close_with_assigned_nurse,
+       sum(case when include_call = 1 and call_participate_to_close = 1 and call_with_assigned_nurse = 1 then phone_call_talk_tm_fix + phone_call_hold_tm_fix end) as talk_tm_participate_to_close_with_assigned_nurse,
+       sum(case when include_call = 1 and call_participate_to_close = 1 and call_with_assigned_nurse = 1 then phone_call_wrap_tm_fix end) as wrap_tm_participate_to_close_with_assigned_nurse,
+
+
+
+       sum(case when include_call = 1 and call_before_enroll = 1 and call_with_assigned_nurse_team = 1 then comm_cnt_fix end) as call_count_before_enrolled_with_assigned_nurse_team,
+       sum(case when include_call = 1 and call_before_enroll = 1 and call_with_assigned_nurse_team = 1 then phone_call_talk_tm_fix + phone_call_hold_tm_fix end) as talk_tm_before_enrolled_with_assigned_nurse_team,
+       sum(case when include_call = 1 and call_before_enroll = 1 and call_with_assigned_nurse_team = 1 then phone_call_wrap_tm_fix end) as wrap_tm_before_enrolled_with_assigned_nurse_team,
+
+       sum(case when include_call = 1 and call_enroll_to_participate = 1 and call_with_assigned_nurse_team = 1 then comm_cnt_fix end) as call_count_enroll_to_participate_with_assigned_nurse_team,
+       sum(case when include_call = 1 and call_enroll_to_participate = 1 and call_with_assigned_nurse_team = 1 then phone_call_talk_tm_fix + phone_call_hold_tm_fix end) as talk_tm_enroll_to_participate_with_assigned_nurse_team,
+       sum(case when include_call = 1 and call_enroll_to_participate = 1 and call_with_assigned_nurse_team = 1 then phone_call_wrap_tm_fix end) as wrap_tm_enroll_to_participate_with_assigned_nurse_team,
+
+       sum(case when include_call = 1 and call_participate_to_close = 1 and call_with_assigned_nurse_team = 1 then comm_cnt_fix end) as call_count_participate_to_close_with_assigned_nurse_team,
+       sum(case when include_call = 1 and call_participate_to_close = 1 and call_with_assigned_nurse_team = 1 then phone_call_talk_tm_fix + phone_call_hold_tm_fix end) as talk_tm_participate_to_close_with_assigned_nurse_team,
+       sum(case when include_call = 1 and call_participate_to_close = 1 and call_with_assigned_nurse_team = 1 then phone_call_wrap_tm_fix end) as wrap_tm_participate_to_close_with_assigned_nurse_team,
+
+       sum(case when include_call = 1 and pharm_call = 1 then comm_cnt_fix end) as pharm_assist_calls,
+       sum(case when include_call = 1 and pharm_call = 1 then phone_call_talk_tm_fix + phone_call_hold_tm_fix end) as pharm_assist_talk_tm,
+       sum(case when include_call = 1 and pharm_call = 1 then phone_call_wrap_tm_fix end) as pharm_assist_wrap_tm,
+
+       MAX(cfc_call_count) as cfc_call_count,
+
+       MAX(jcf.cfc_mesg_comm_count_before_enroll) as cfc_mesg_comm_count_before_enroll,
+       MAX(jcf.cfc_mesg_comm_count_after_enroll) as cfc_mesg_comm_count_after_enroll,
+       MAX(jcf.cfc_mesg_comm_count) as cfc_mesg_comm_count,
+
+       MAX(mesg_id_cnt) as mesg_id_cnt,
+
+       MAX(jcf.ha_mesg_cnt) as ha_mesg_id_cnt,
+       MAX(jcf.ha_mesg_id_cnt_before_enroll) as ha_mesg_id_cnt_before_enroll,
+       MAX(jcf.ha_mesg_id_cnt_after_enroll) as ha_mesg_id_cnt_after_enroll,
+
+       MAX(jcf.cha_mesg_cnt) as cha_mesg_id_cnt,
+       MAX(jcf.cha_mesg_id_cnt_before_enroll) as cha_mesg_id_cnt_before_enroll,
+       MAX(jcf.cha_mesg_id_cnt_after_enroll) as cha_mesg_id_cnt_after_enroll
+
+
+FROM #jiva_comm_fix jcf
+group by identification_id;
+SQL
+
+
+-- Prep Time and Non-Member Calls
+DROP TABLE IF EXISTS #prep_time;
+SQL
+CREATE TABLE #prep_time AS
+WITH prac_sts as (
+    select pract_id,
+           start_dtm::date as day,
+           MAX(date_part('year',start_dtm::date) || lpad(date_part('month',start_dtm::date),2,0)) as prep_period,
+           sum(datediff('second',start_dtm, end_dtm)) as time
+
+    from edw.practnr_sts
+    where state = 'assisting-members'
+      and day >= '2023-08-01'
+    group by pract_id, day)
+
+Select pract_id,
+       prep_period,
+       count(distinct day) as prep_time_day_count,
+       sum(time) as prep_time_sec,
+       sum(case when time <= 43200 then time else 43200 end) as prep_time_cap_sec,
+       count(case when time > 43200 then time end) as capped_days_count,
+       prep_time_cap_sec / 3600.0 as prep_time_hrs,
+       prep_time_cap_sec / prep_time_day_count / 3600.0 as avg_prep_time_per_day_hrs
+from prac_sts
+group by pract_id, prep_period;
+SQL
+
+
+
+DROP TABLE IF EXISTS #non_mbr_calls;
+SQL
+CREATE TABLE #non_mbr_calls AS
+WITH calls as (
+    Select pc.*,
+           pc.person_id as orig_pers_id,
+           pc.drvd_mbrshp_covrg_id as orig_covg_id,
+
+           CASE WHEN PC.drvd_pc_comm_id is null then PC.related_call_id else PC.drvd_pc_comm_id end as comm_id_v2,
+           comm_id_v2 || '-' || PC.phone_call_direction || '-' || date_trunc('minute', PC.utc_call_start_dtm)  as new_comm_id,
+           row_number() over (partition by new_comm_id order by PC.phone_call_talk_tm desc) as rn
+
+    FROM info_layer.phone_call_engmnt_dtl pc
+    WHERE ((PC.phone_call_direction = 'Inbound' AND NOT (PC.phone_call_talk_tm = 0 AND PC.phone_Call_hold_tm = 0 AND PC.drvd_phone_call_ans_tm = 0 AND PC.phone_call_menu_tm = 0 AND PC.phone_Call_wrap_tm = 0))
+        OR (PC.phone_call_direction = 'Internal')
+        OR (PC.phone_call_direction = 'Outbound' AND NOT (PC.drvd_practitioner_id = 'NA' AND (PC.phone_call_talk_tm = 0 AND PC.phone_Call_hold_tm = 0 AND PC.drvd_phone_call_ans_tm = 0 AND PC.phone_call_menu_tm = 0 AND PC.phone_Call_wrap_tm = 0)))
+        OR (PC.phone_call_direction = 'Callback' AND NOT (PC.drvd_practitioner_id = 'NA' AND (PC.phone_call_talk_tm = 0 AND PC.phone_Call_hold_tm = 0 AND PC.drvd_phone_call_ans_tm = 0 AND PC.phone_call_menu_tm = 0 AND PC.phone_Call_wrap_tm = 0))))
+      and pc.person_id IN ('provider','employer', 'vendor', 'ben-admin', 'health-plan', 'accolade', 'non-member','NA')
+      and pc.drvd_practitioner_id <> 'NA'
+      and pc.utc_period >= 202308),
+
+     call_days as (
+         select drvd_practitioner_id, utc_day_key,
+                max(utc_period) as utc_period,
+
+                count(distinct new_comm_id) as call_count,
+                count(case when person_id = 'provider' then new_comm_id end) as call_count_provider,
+                count(case when person_id = 'employer' then new_comm_id end) as call_count_employer,
+                count(case when person_id = 'vendor' then new_comm_id end) as call_count_vendor,
+                count(case when person_id = 'ben-admin' then new_comm_id end) as call_count_ben_admin,
+                count(case when person_id = 'health-plan' then new_comm_id end) as call_count_health_plan,
+                count(case when person_id = 'accolade' then new_comm_id end) as call_count_accolade,
+                count(case when person_id = 'NA' then new_comm_id end) as call_count_unknown,
+
+                sum(LEAST(phone_call_talk_tm + phone_call_hold_tm,43200)) as talk_tm,
+                sum(case when person_id = 'provider' then LEAST(phone_call_talk_tm + phone_call_hold_tm,43200) end) as talk_tm_provider,
+                sum(case when person_id = 'employer' then LEAST(phone_call_talk_tm + phone_call_hold_tm,43200) end) as talk_tm_employer,
+                sum(case when person_id = 'vendor' then LEAST(phone_call_talk_tm + phone_call_hold_tm,43200) end) as talk_tm_vendor,
+                sum(case when person_id = 'ben-admin' then LEAST(phone_call_talk_tm + phone_call_hold_tm,43200) end) as talk_tm_ben_admin,
+                sum(case when person_id = 'health-plan' then LEAST(phone_call_talk_tm + phone_call_hold_tm,43200) end) as talk_tm_health_plan,
+                sum(case when person_id = 'accolade' then LEAST(phone_call_talk_tm + phone_call_hold_tm,43200) end) as talk_tm_accolade,
+                sum(case when person_id = 'NA' then LEAST(phone_call_talk_tm + phone_call_hold_tm,43200) end) as talk_tm_unknown,
+
+                sum(LEAST(phone_call_wrap_tm,43200)) as wrap_tm,
+                sum(case when person_id = 'provider' then LEAST(phone_call_wrap_tm,43200) end) as wrap_tm_provider,
+                sum(case when person_id = 'employer' then LEAST(phone_call_wrap_tm,43200) end) as wrap_tm_employer,
+                sum(case when person_id = 'vendor' then LEAST(phone_call_wrap_tm,43200) end) as wrap_tm_vendor,
+                sum(case when person_id = 'ben-admin' then LEAST(phone_call_wrap_tm,43200) end) as wrap_tm_ben_admin,
+                sum(case when person_id = 'health-plan' then LEAST(phone_call_wrap_tm,43200) end) as wrap_tm_health_plan,
+                sum(case when person_id = 'accolade' then LEAST(phone_call_wrap_tm,43200) end) as wrap_tm_accolade,
+                sum(case when person_id = 'NA' then LEAST(phone_call_wrap_tm,43200) end) as wrap_tm_unknown,
+
+                sum(LEAST(phone_call_talk_tm + phone_call_hold_tm + phone_call_wrap_tm,43200)) as work_tm,
+                sum(case when person_id = 'provider' then LEAST(phone_call_talk_tm + phone_call_hold_tm + phone_call_wrap_tm,43200) end) as work_tm_provider,
+                sum(case when person_id = 'employer' then LEAST(phone_call_talk_tm + phone_call_hold_tm + phone_call_wrap_tm,43200) end) as work_tm_employer,
+                sum(case when person_id = 'vendor' then LEAST(phone_call_talk_tm + phone_call_hold_tm + phone_call_wrap_tm,43200) end) as work_tm_vendor,
+                sum(case when person_id = 'ben-admin' then LEAST(phone_call_talk_tm + phone_call_hold_tm + phone_call_wrap_tm,43200) end) as work_tm_ben_admin,
+                sum(case when person_id = 'health-plan' then LEAST(phone_call_talk_tm + phone_call_hold_tm + phone_call_wrap_tm,43200) end) as work_tm_health_plan,
+                sum(case when person_id = 'accolade' then LEAST(phone_call_talk_tm + phone_call_hold_tm + phone_call_wrap_tm,43200) end) as work_tm_accolade,
+                sum(case when person_id = 'NA' then LEAST(phone_call_talk_tm + phone_call_hold_tm + phone_call_wrap_tm,43200) end) as work_tm_unknown
+
+         from (select * from calls where rn = 1) sub
+         group by drvd_practitioner_id, utc_day_key
+     )
+
+select drvd_practitioner_id,
+       utc_period as call_period,
+       count(distinct utc_day_key) as call_day_count,
+       count(distinct case when talk_tm = 43200 or wrap_tm = 43200 or work_tm = 43200 then utc_day_key end) as capped_day_count,
+
+       sum(call_count) as call_count,
+       sum(call_count_provider) as call_count_provider,
+       sum(call_count_vendor) as call_count_vendor,
+       sum(call_count_ben_admin) as call_count_ben_admin,
+       sum(call_count_health_plan) as call_count_health_plan,
+       sum(call_count_accolade) as call_count_accolade,
+       sum(call_count_unknown) as call_count_unknown,
+
+       sum(talk_tm) as talk_tm,
+       sum(talk_tm_provider) as talk_tm_provider,
+       sum(talk_tm_vendor) as talk_tm_vendor,
+       sum(talk_tm_ben_admin) as talk_tm_ben_admin,
+       sum(talk_tm_health_plan) as talk_tm_health_plan,
+       sum(talk_tm_accolade) as talk_tm_accolade,
+       sum(talk_tm_unknown) as talk_tm_unknown,
+
+       sum(wrap_tm) as wrap_tm,
+       sum(wrap_tm_provider) as wrap_tm_provider,
+       sum(wrap_tm_vendor) as wrap_tm_vendor,
+       sum(wrap_tm_ben_admin) as wrap_tm_ben_admin,
+       sum(wrap_tm_health_plan) as wrap_tm_health_plan,
+       sum(wrap_tm_accolade) as wrap_tm_accolade,
+       sum(wrap_tm_unknown) as wrap_tm_unknown,
+
+       sum(work_tm) as work_tm,
+       sum(work_tm_provider) as work_tm_provider,
+       sum(work_tm_vendor) as work_tm_vendor,
+       sum(work_tm_ben_admin) as work_tm_ben_admin,
+       sum(work_tm_health_plan) as work_tm_health_plan,
+       sum(work_tm_accolade) as work_tm_accolade,
+       sum(work_tm_unknown) as work_tm_unknown
+
+from call_days
+group by drvd_practitioner_id, call_period;
+SQL
+
+
+
+DROP TABLE IF EXISTS #prep_non_mbr;
+SQL
+CREATE TABLE #prep_non_mbr AS
+select distinct jau.practitioner_id as practitioner_id,
+                dd.period,
+                prep.*, nmc.*
+from #jiva_assigned_user jau
+         CROSS JOIN (select distinct dd.year_number||lpad(dd.month_number,2,0) as period
+                     from info_layer.dim_date dd
+                     where dd.year_number||lpad(dd.month_number,2,0) between 202308 and date_part('year',current_date)||lpad(date_part('month',current_date),2,0)
+) dd
+         left join #non_mbr_calls nmc on nmc.drvd_practitioner_id = jau.practitioner_id and nmc.call_period = dd.period
+         left join #prep_time prep on prep.pract_id = jau.practitioner_id and prep.prep_period = dd.period
+where jau.practitioner_id is not null --and user_team_bucket = 'HA' OR (user_team_bucket = 'CHA' AND user_team <> 'Kate Rollins' and user_team <> 'Shantanu Nundy')
+order by practitioner_id, dd.period;
+
+
+
+SQL
+DROP TABLE IF EXISTS #prep_non_mbr_episode;
+SQL
+CREATE TABLE #prep_non_mbr_episode AS
+WITH data as (
+    select distinct jg.period, jg.enc_idn,
+                    jau.practitioner_id,jau.curr_assigned_nurse, jau.user_team,ep_cnt,
+
+                    prep_time_cap_sec as total_monthly_prep_time_sec,
+                    prep_time_cap_sec / ep_cnt as avg_ep_prep_time_sec,
+
+                    call_count as monthly_non_mbr_call_count,
+                    call_count / ep_cnt as avg_ep_non_mbr_call_count,
+                    call_count_provider / ep_cnt as avg_ep_non_mbr_call_count_provider,
+                    call_count_vendor / ep_cnt as avg_ep_non_mbr_call_count_vendor,
+                    call_count_ben_admin / ep_cnt as avg_ep_non_mbr_call_count_ben_admin,
+                    call_count_health_plan / ep_cnt as avg_ep_non_mbr_call_count_health_plan,
+                    call_count_accolade / ep_cnt as avg_ep_non_mbr_call_count_accolade,
+                    call_count_unknown / ep_cnt as avg_ep_non_mbr_call_count_unknown,
+
+                    talk_tm as monthly_non_mbr_talk_tm,
+                    talk_tm / ep_cnt as avg_ep_non_mbr_talk_tm,
+                    talk_tm_provider / ep_cnt as avg_ep_non_mbr_talk_tm_provider,
+                    talk_tm_vendor / ep_cnt as avg_ep_non_mbr_talk_tm_vendor,
+                    talk_tm_ben_admin / ep_cnt as avg_ep_non_mbr_talk_tm_ben_admin,
+                    talk_tm_health_plan / ep_cnt as avg_ep_non_mbr_talk_tm_health_plan,
+                    talk_tm_accolade / ep_cnt as avg_ep_non_mbr_talk_tm_accolade,
+                    talk_tm_unknown / ep_cnt as avg_ep_non_mbr_talk_tm_unknown,
+
+                    wrap_tm as monthly_non_mbr_wrap_tm,
+                    wrap_tm / ep_cnt as avg_ep_non_mbr_wrap_tm,
+                    wrap_tm_provider / ep_cnt as avg_ep_non_mbr_wrap_tm_provider,
+                    wrap_tm_vendor / ep_cnt as avg_ep_non_mbr_wrap_tm_vendor,
+                    wrap_tm_ben_admin / ep_cnt as avg_ep_non_mbr_wrap_tm_ben_admin,
+                    wrap_tm_health_plan / ep_cnt as avg_ep_non_mbr_wrap_tm_health_plan,
+                    wrap_tm_accolade / ep_cnt as avg_ep_non_mbr_wrap_tm_accolade,
+                    wrap_tm_unknown / ep_cnt as avg_ep_non_mbr_wrap_tm_unknown,
+
+                    work_tm as monthly_non_mbr_work_tm,
+                    work_tm / ep_cnt as avg_ep_non_mbr_work_tm,
+                    work_tm_provider / ep_cnt as avg_ep_non_mbr_work_tm_provider,
+                    work_tm_vendor / ep_cnt as avg_ep_non_mbr_work_tm_vendor,
+                    work_tm_ben_admin / ep_cnt as avg_ep_non_mbr_work_tm_ben_admin,
+                    work_tm_health_plan / ep_cnt as avg_ep_non_mbr_work_tm_health_plan,
+                    work_tm_accolade / ep_cnt as avg_ep_non_mbr_work_tm_accolade,
+                    work_tm_unknown / ep_cnt as avg_ep_non_mbr_work_tm_unknown
+
+
+    from #jiva_assigned_user jau
+             left join #jiva_grouped jg on jg.enc_idn = jau.enc_idn
+             left join (select jiva_ep_id, test_ind from #cp_final where #cp_final.jiva_ep_id is not null) cpf on cpf.jiva_ep_id = jg.enc_idn
+             left join #prep_non_mbr pnm on pnm.practitioner_id = jau.practitioner_id and pnm.period = jg.period
+             left join (
+        select jg.period, jau.practitioner_id, count(distinct jg.enc_idn)*1.0 as ep_cnt
+        from #jiva_assigned_user jau
+                 left join #jiva_grouped jg on jg.enc_idn = jau.enc_idn
+                 left join (select jiva_ep_id, test_ind from #cp_final where #cp_final.jiva_ep_id is not null) cpf on cpf.jiva_ep_id = jg.enc_idn
+        where cpf.test_ind = 0
+        group by jau.practitioner_id, jg.period
+    ) ep_cnt on ep_cnt.period = jg.period and ep_cnt.practitioner_id = jau.practitioner_id
+    where cpf.test_ind = 0 and jau.user_team_bucket = 'CHA'
+    order by jau.enc_idn, jau.curr_assigned_nurse
+)
+select data.enc_idn as other_time_ep_id,
+
+       sum(total_monthly_prep_time_sec) as total_monthly_prep_time_secs,
+       sum(avg_ep_prep_time_sec) as avg_ep_prep_time_secs,
+
+       sum(monthly_non_mbr_call_count) as monthly_non_mbr_call_counts,
+       sum(avg_ep_non_mbr_call_count) as avg_ep_non_mbr_call_counts,
+       sum(avg_ep_non_mbr_call_count_provider) as avg_ep_non_mbr_call_counts_provider,
+       sum(avg_ep_non_mbr_call_count_vendor) as avg_ep_non_mbr_call_counts_vendor,
+       sum(avg_ep_non_mbr_call_count_ben_admin) as avg_ep_non_mbr_call_counts_ben_admin,
+       sum(avg_ep_non_mbr_call_count_health_plan) as avg_ep_non_mbr_call_counts_health_plan,
+       sum(avg_ep_non_mbr_call_count_accolade) as avg_ep_non_mbr_call_counts_accolade,
+       sum(avg_ep_non_mbr_call_count_unknown) as avg_ep_non_mbr_call_counts_unknown,
+
+       sum(monthly_non_mbr_talk_tm) as monthly_non_mbr_talk_tms,
+       sum(avg_ep_non_mbr_talk_tm) as avg_ep_non_mbr_talk_tms,
+       sum(avg_ep_non_mbr_talk_tm_provider) as avg_ep_non_mbr_talk_tms_provider,
+       sum(avg_ep_non_mbr_talk_tm_vendor) as avg_ep_non_mbr_talk_tms_vendor,
+       sum(avg_ep_non_mbr_talk_tm_ben_admin) as avg_ep_non_mbr_talk_tms_ben_admin,
+       sum(avg_ep_non_mbr_talk_tm_health_plan) as avg_ep_non_mbr_talk_tms_health_plan,
+       sum(avg_ep_non_mbr_talk_tm_accolade) as avg_ep_non_mbr_talk_tms_accolade,
+       sum(avg_ep_non_mbr_talk_tm_unknown) as avg_ep_non_mbr_talk_tms_unknown,
+
+       sum(monthly_non_mbr_wrap_tm) as monthly_non_mbr_wrap_tms,
+       sum(avg_ep_non_mbr_wrap_tm) as avg_ep_non_mbr_wrap_tms,
+       sum(avg_ep_non_mbr_wrap_tm_provider) as avg_ep_non_mbr_wrap_tms_provider,
+       sum(avg_ep_non_mbr_wrap_tm_vendor) as avg_ep_non_mbr_wrap_tms_vendor,
+       sum(avg_ep_non_mbr_wrap_tm_ben_admin) as avg_ep_non_mbr_wrap_tms_ben_admin,
+       sum(avg_ep_non_mbr_wrap_tm_health_plan) as avg_ep_non_mbr_wrap_tms_health_plan,
+       sum(avg_ep_non_mbr_wrap_tm_accolade) as avg_ep_non_mbr_wrap_tms_accolade,
+       sum(avg_ep_non_mbr_wrap_tm_unknown) as avg_ep_non_mbr_wrap_tms_unknown,
+
+       sum(monthly_non_mbr_work_tm) as monthly_non_mbr_work_tms,
+       sum(avg_ep_non_mbr_work_tm) as avg_ep_non_mbr_work_tms,
+       sum(avg_ep_non_mbr_work_tm_provider) as avg_ep_non_mbr_work_tms_provider,
+       sum(avg_ep_non_mbr_work_tm_vendor) as avg_ep_non_mbr_work_tms_vendor,
+       sum(avg_ep_non_mbr_work_tm_ben_admin) as avg_ep_non_mbr_work_tms_ben_admin,
+       sum(avg_ep_non_mbr_work_tm_health_plan) as avg_ep_non_mbr_work_tms_health_plan,
+       sum(avg_ep_non_mbr_work_tm_accolade) as avg_ep_non_mbr_work_tms_accolade,
+       sum(avg_ep_non_mbr_work_tm_unknown) as avg_ep_non_mbr_work_tms_unknown
+
+from data
+group by data.enc_idn;
+
+SQL
+
+
+DROP TABLE IF EXISTS #episodes_final;
+SQL
+CREATE TABLE #episodes_final AS
+select *
+from #episode_grouping_comm epc
+         left join #prep_non_mbr_episode pnme on pnme.other_time_ep_id = epc.jiva_ep_id;
+
+episodes:
+SQL
+select *
+from #episodes_final;
+
+
+jiva_episodes_conversion:
+LOAD
+identification_id as jiva_identification_id,
+cf_covg_id as jiva_cf_covg_id,
+hcc_50k as jiva_hcc_50k,
+hcc_100k as jiva_hcc_100k,
+person_id as jiva_person_id,
+stratification_period as jiva_stratification_period,
+strat_pgrm as jiva_strat_pgrm,
+strat_pgrm_bucket as jiva_strat_pgrm_bucket,
+org_nm as jiva_org_nm,
+identification_id_type as jiva_identification_id_type,
+identification_type as jiva_identification_type,
+identification_method as jiva_identification_method,
+referral_src_disp as jiva_referral_src_disp,
+stratified_dt as jiva_stratified_dt,
+identification_dt as jiva_identification_dt,
+data_connection_issue as jiva_data_connection_issue,
+care_pln_id as jiva_care_pln_id,
+cp_connection as jiva_cp_connection,
+enctr_id as jiva_enctr_id,
+jiva_ep_id as jiva_jiva_ep_id,
+jiva_connection as jiva_jiva_connection,
+jiva_identified_period as jiva_jiva_identified_period,
+current_assigned_practitioner_id as jiva_current_assigned_practitioner_id,
+current_assigned_user as jiva_current_assigned_user,
+current_assigned_user_team as jiva_current_assigned_user_team,
+current_assigned_user_team_bucket as jiva_current_assigned_user_team_bucket,
+current_assigned_user_sub_team as jiva_current_assigned_user_sub_team,
+current_assigned_user_manager_1 as jiva_current_assigned_user_manager_1,
+current_assigned_user_manager_2 as jiva_current_assigned_user_manager_2,
+original_practitioner_id as jiva_original_practitioner_id,
+original_assigned_user as jiva_original_assigned_user,
+original_assigned_user_team as jiva_original_assigned_user_team,
+original_assigned_user_team_bucket as jiva_original_assigned_user_team_bucket,
+curr_program_title as jiva_curr_program_title,
+curr_program_title_group1 as jiva_curr_program_title_group1,
+curr_program_title_group2 as jiva_curr_program_title_group2,
+episode_status as jiva_episode_status,
+episode_start_datetime as jiva_episode_start_datetime,
+identified_datetime_strict as jiva_identified_datetime_strict,
+identified_datetime as jiva_identified_datetime,
+assigned_datetime as jiva_assigned_datetime,
+outreach_datetime as jiva_outreach_datetime,
+enrolled_datetime as jiva_enrolled_datetime,
+first_initial_asmnt_qstn_started_datetime as jiva_first_initial_asmnt_qstn_started_datetime,
+first_initial_asmnt_qstn_ind as jiva_first_initial_asmnt_qstn_ind,
+pgi_started_datetime as jiva_pgi_started_datetime,
+first_intrv_start_dtm as jiva_first_intrv_start_dtm,
+first_pgi_completed_datetime as jiva_first_pgi_completed_datetime,
+pgi_completed_period as jiva_pgi_completed_period,
+participating_datetime as jiva_participating_datetime,
+first_followup_asmnt_qstn_started_datetime as jiva_first_followup_asmnt_qstn_started_datetime,
+first_followup_asmnt_qstn_ind as jiva_first_followup_asmnt_qstn_ind,
+closed_datetime as jiva_closed_datetime,
+closed_period as jiva_closed_period,
+episode_tat_start_end_days as jiva_episode_tat_start_end_days,
+episode_tat_enroll_close_days as jiva_episode_tat_enroll_close_days,
+episode_tat_intial_asmnt_close_days as jiva_episode_tat_intial_asmnt_close_days,
+episode_tat_identify_enroll_days as jiva_episode_tat_identify_enroll_days,
+episode_tat_enroll_pgi_start_days as jiva_episode_tat_enroll_pgi_start_days,
+episode_tat_pgi_start_pgi_complete_days as jiva_episode_tat_pgi_start_pgi_complete_days,
+episode_tat_pgi_complete_participate_or_close_days as jiva_episode_tat_pgi_complete_participate_or_close_days,
+identified_ind as jiva_identified_ind,
+assigned_ind as jiva_assigned_ind,
+outreach_ind as jiva_outreach_ind,
+enrollment_ind as jiva_enrollment_ind,
+initial_asmnt_started_ind as jiva_initial_asmnt_started_ind,
+participting_ind as jiva_participting_ind,
+closed_ind as jiva_closed_ind,
+graduated_ind as jiva_graduated_ind,
+pgi_ind as jiva_pgi_ind,
+pgi_completed_ind as jiva_pgi_completed_ind,
+pgi_started_ind as jiva_pgi_started_ind,
+pgi_started_cnt as jiva_pgi_started_cnt,
+pgi_completed_cnt as jiva_pgi_completed_cnt,
+all_pgi_complete_ind as jiva_all_pgi_complete_ind,
+clear_triage_ind as jiva_clear_triage_ind,
+pharmacy_ind as jiva_pharmacy_ind,
+social_worker_ind as jiva_social_worker_ind,
+dietitian_ind as jiva_dietitian_ind,
+status_change_reason as jiva_status_change_reason,
+initial_asmnt_ind as jiva_initial_asmnt_ind,
+initial_asmnt_status as jiva_initial_asmnt_status,
+initial_asmnt_added_dtm as jiva_initial_asmnt_added_dtm,
+initial_asmnt_completed_qstn as jiva_initial_asmnt_completed_qstn,
+initial_asmnt_completed_ind as jiva_initial_asmnt_completed_ind,
+initial_asmnt_total_qstn as jiva_initial_asmnt_total_qstn,
+followup_asmnt_ind as jiva_followup_asmnt_ind,
+followup_asmnt_status as jiva_followup_asmnt_status,
+followup_asmnt_dtm as jiva_followup_asmnt_dtm,
+followup_asmnt_completed_qstn as jiva_followup_asmnt_completed_qstn,
+followup_asmnt_total_qstn as jiva_followup_asmnt_total_qstn,
+inventory_stratified as jiva_inventory_stratified,
+inventory_identified_not_in_jiva as jiva_inventory_identified_not_in_jiva,
+inventory_enrolled_not_in_jiva as jiva_inventory_enrolled_not_in_jiva,
+inventory_participated_not_in_jiva as jiva_inventory_participated_not_in_jiva,
+inventory_identified as jiva_inventory_identified,
+inventory_enrolled as jiva_inventory_enrolled,
+inventory_initial_asmnt_started as jiva_inventory_initial_asmnt_started,
+inventory_pgi_started as jiva_inventory_pgi_started,
+inventory_first_pgi_completed as jiva_inventory_first_pgi_completed,
+inventory_participating as jiva_inventory_participating,
+inventory_follow_up_asmnt_started as jiva_inventory_follow_up_asmnt_started,
+workload as jiva_workload,
+inventory_closed as jiva_inventory_closed,
+first_cha_call_date as jiva_first_cha_call_date,
+cha_call_ind as jiva_cha_call_ind,
+first_successful_cha_call_date as jiva_first_successful_cha_call_date,
+cha_successful_call_ind as jiva_cha_successful_call_ind,
+first_call_date as jiva_first_call_date,
+call_ind as jiva_call_ind,
+first_successful_call_date as jiva_first_successful_call_date,
+successful_call_ind as jiva_successful_call_ind,
+first_call_team_bucket as jiva_first_call_team_bucket,
+first_call_team as jiva_first_call_team,
+contact_ind as jiva_contact_ind,
+reached_ind as jiva_reached_ind,
+member_comm_exists as jiva_member_comm_exists,
+call_count_before_enrolled as jiva_call_count_before_enrolled,
+call_count_ha_before_enrolled as jiva_call_count_ha_before_enrolled,
+call_count_cha_before_enrolled as jiva_call_count_cha_before_enrolled,
+talk_tm_before_enrolled as jiva_talk_tm_before_enrolled,
+talk_tm_ha_before_enrolled as jiva_talk_tm_ha_before_enrolled,
+talk_tm_cha_before_enrolled as jiva_talk_tm_cha_before_enrolled,
+wrap_tm_before_enrolled as jiva_wrap_tm_before_enrolled,
+wrap_tm_ha_before_enrolled as jiva_wrap_tm_ha_before_enrolled,
+wrap_tm_cha_before_enrolled as jiva_wrap_tm_cha_before_enrolled,
+call_count_enroll_to_participate as jiva_call_count_enroll_to_participate,
+call_count_ha_enroll_to_participate as jiva_call_count_ha_enroll_to_participate,
+call_count_cha_enroll_to_participate as jiva_call_count_cha_enroll_to_participate,
+talk_tm_enroll_to_participate as jiva_talk_tm_enroll_to_participate,
+talk_tm_ha_enroll_to_participate as jiva_talk_tm_ha_enroll_to_participate,
+talk_tm_cha_enroll_to_participate as jiva_talk_tm_cha_enroll_to_participate,
+wrap_tm_enroll_to_participate as jiva_wrap_tm_enroll_to_participate,
+wrap_tm_ha_enroll_to_participate as jiva_wrap_tm_ha_enroll_to_participate,
+wrap_tm_cha_enroll_to_participate as jiva_wrap_tm_cha_enroll_to_participate,
+call_count_participate_to_close as jiva_call_count_participate_to_close,
+call_count_ha_participate_to_close as jiva_call_count_ha_participate_to_close,
+call_count_cha_participate_to_close as jiva_call_count_cha_participate_to_close,
+talk_tm_participate_to_close as jiva_talk_tm_participate_to_close,
+talk_tm_ha_participate_to_close as jiva_talk_tm_ha_participate_to_close,
+talk_tm_cha_participate_to_close as jiva_talk_tm_cha_participate_to_close,
+wrap_tm_participate_to_close as jiva_wrap_tm_participate_to_close,
+wrap_tm_ha_participate_to_close as jiva_wrap_tm_ha_participate_to_close,
+wrap_tm_cha_participate_to_close as jiva_wrap_tm_cha_participate_to_close,
+call_count_before_enrolled_with_assigned_nurse as jiva_call_count_before_enrolled_with_assigned_nurse,
+talk_tm_before_enrolled_with_assigned_nurse as jiva_talk_tm_before_enrolled_with_assigned_nurse,
+wrap_tm_before_enrolled_with_assigned_nurse as jiva_wrap_tm_before_enrolled_with_assigned_nurse,
+call_count_enroll_to_participate_with_assigned_nurse as jiva_call_count_enroll_to_participate_with_assigned_nurse,
+talk_tm_enroll_to_participate_with_assigned_nurse as jiva_talk_tm_enroll_to_participate_with_assigned_nurse,
+wrap_tm_enroll_to_participate_with_assigned_nurse as jiva_wrap_tm_enroll_to_participate_with_assigned_nurse,
+call_count_participate_to_close_with_assigned_nurse as jiva_call_count_participate_to_close_with_assigned_nurse,
+talk_tm_participate_to_close_with_assigned_nurse as jiva_talk_tm_participate_to_close_with_assigned_nurse,
+wrap_tm_participate_to_close_with_assigned_nurse as jiva_wrap_tm_participate_to_close_with_assigned_nurse,
+call_count_before_enrolled_with_assigned_nurse_team as jiva_call_count_before_enrolled_with_assigned_nurse_team,
+talk_tm_before_enrolled_with_assigned_nurse_team as jiva_talk_tm_before_enrolled_with_assigned_nurse_team,
+wrap_tm_before_enrolled_with_assigned_nurse_team as jiva_wrap_tm_before_enrolled_with_assigned_nurse_team,
+call_count_enroll_to_participate_with_assigned_nurse_team as jiva_call_count_enroll_to_participate_with_assigned_nurse_team,
+talk_tm_enroll_to_participate_with_assigned_nurse_team as jiva_talk_tm_enroll_to_participate_with_assigned_nurse_team,
+wrap_tm_enroll_to_participate_with_assigned_nurse_team as jiva_wrap_tm_enroll_to_participate_with_assigned_nurse_team,
+call_count_participate_to_close_with_assigned_nurse_team as jiva_call_count_participate_to_close_with_assigned_nurse_team,
+talk_tm_participate_to_close_with_assigned_nurse_team as jiva_talk_tm_participate_to_close_with_assigned_nurse_team,
+wrap_tm_participate_to_close_with_assigned_nurse_team as jiva_wrap_tm_participate_to_close_with_assigned_nurse_team,
+pharm_assist_calls as jiva_pharm_assist_calls,
+pharm_assist_talk_tm as jiva_pharm_assist_talk_tm,
+pharm_assist_wrap_tm as jiva_pharm_assist_wrap_tm,
+cfc_call_count as jiva_cfc_call_count,
+cfc_mesg_comm_count_before_enroll as jiva_cfc_mesg_comm_count_before_enroll,
+cfc_mesg_comm_count_after_enroll as jiva_cfc_mesg_comm_count_after_enroll,
+cfc_mesg_comm_count as jiva_cfc_mesg_comm_count,
+mesg_id_cnt as jiva_mesg_id_cnt,
+ha_mesg_id_cnt as jiva_ha_mesg_id_cnt,
+ha_mesg_id_cnt_before_enroll as jiva_ha_mesg_id_cnt_before_enroll,
+ha_mesg_id_cnt_after_enroll as jiva_ha_mesg_id_cnt_after_enroll,
+cha_mesg_id_cnt as jiva_cha_mesg_id_cnt,
+cha_mesg_id_cnt_before_enroll as jiva_cha_mesg_id_cnt_before_enroll,
+cha_mesg_id_cnt_after_enroll as jiva_cha_mesg_id_cnt_after_enroll,
+other_time_ep_id as jiva_other_time_ep_id,
+total_monthly_prep_time_secs as jiva_total_monthly_prep_time_secs,
+avg_ep_prep_time_secs as jiva_avg_ep_prep_time_secs,
+monthly_non_mbr_call_counts as jiva_monthly_non_mbr_call_counts,
+avg_ep_non_mbr_call_counts as jiva_avg_ep_non_mbr_call_counts,
+avg_ep_non_mbr_call_counts_provider as jiva_avg_ep_non_mbr_call_counts_provider,
+avg_ep_non_mbr_call_counts_vendor as jiva_avg_ep_non_mbr_call_counts_vendor,
+avg_ep_non_mbr_call_counts_ben_admin as jiva_avg_ep_non_mbr_call_counts_ben_admin,
+avg_ep_non_mbr_call_counts_health_plan as jiva_avg_ep_non_mbr_call_counts_health_plan,
+avg_ep_non_mbr_call_counts_accolade as jiva_avg_ep_non_mbr_call_counts_accolade,
+avg_ep_non_mbr_call_counts_unknown as jiva_avg_ep_non_mbr_call_counts_unknown,
+monthly_non_mbr_talk_tms as jiva_monthly_non_mbr_talk_tms,
+avg_ep_non_mbr_talk_tms as jiva_avg_ep_non_mbr_talk_tms,
+avg_ep_non_mbr_talk_tms_provider as jiva_avg_ep_non_mbr_talk_tms_provider,
+avg_ep_non_mbr_talk_tms_vendor as jiva_avg_ep_non_mbr_talk_tms_vendor,
+avg_ep_non_mbr_talk_tms_ben_admin as jiva_avg_ep_non_mbr_talk_tms_ben_admin,
+avg_ep_non_mbr_talk_tms_health_plan as jiva_avg_ep_non_mbr_talk_tms_health_plan,
+avg_ep_non_mbr_talk_tms_accolade as jiva_avg_ep_non_mbr_talk_tms_accolade,
+avg_ep_non_mbr_talk_tms_unknown as jiva_avg_ep_non_mbr_talk_tms_unknown,
+monthly_non_mbr_wrap_tms as jiva_monthly_non_mbr_wrap_tms,
+avg_ep_non_mbr_wrap_tms as jiva_avg_ep_non_mbr_wrap_tms,
+avg_ep_non_mbr_wrap_tms_provider as jiva_avg_ep_non_mbr_wrap_tms_provider,
+avg_ep_non_mbr_wrap_tms_vendor as jiva_avg_ep_non_mbr_wrap_tms_vendor,
+avg_ep_non_mbr_wrap_tms_ben_admin as jiva_avg_ep_non_mbr_wrap_tms_ben_admin,
+avg_ep_non_mbr_wrap_tms_health_plan as jiva_avg_ep_non_mbr_wrap_tms_health_plan,
+avg_ep_non_mbr_wrap_tms_accolade as jiva_avg_ep_non_mbr_wrap_tms_accolade,
+avg_ep_non_mbr_wrap_tms_unknown as jiva_avg_ep_non_mbr_wrap_tms_unknown,
+monthly_non_mbr_work_tms as jiva_monthly_non_mbr_work_tms,
+avg_ep_non_mbr_work_tms as jiva_avg_ep_non_mbr_work_tms,
+avg_ep_non_mbr_work_tms_provider as jiva_avg_ep_non_mbr_work_tms_provider,
+avg_ep_non_mbr_work_tms_vendor as jiva_avg_ep_non_mbr_work_tms_vendor,
+avg_ep_non_mbr_work_tms_ben_admin as jiva_avg_ep_non_mbr_work_tms_ben_admin,
+avg_ep_non_mbr_work_tms_health_plan as jiva_avg_ep_non_mbr_work_tms_health_plan,
+avg_ep_non_mbr_work_tms_accolade as jiva_avg_ep_non_mbr_work_tms_accolade,
+avg_ep_non_mbr_work_tms_unknown as jiva_avg_ep_non_mbr_work_tms_unknown
+;
+SQL
+select * 
+from #episodes_final
+where jiva_connection = 1;
+
+
+
+effort_episodes:
+LOAD
+identification_id as effort_identification_id,
+cf_covg_id as effort_cf_covg_id,
+hcc_50k as effort_hcc_50k,
+hcc_100k as effort_hcc_100k,
+person_id as effort_person_id,
+stratification_period as effort_stratification_period,
+strat_pgrm as effort_strat_pgrm,
+strat_pgrm_bucket as effort_strat_pgrm_bucket,
+org_nm as effort_org_nm,
+identification_id_type as effort_identification_id_type,
+identification_type as effort_identification_type,
+identification_method as effort_identification_method,
+referral_src_disp as effort_referral_src_disp,
+stratified_dt as effort_stratified_dt,
+identification_dt as effort_identification_dt,
+data_connection_issue as effort_data_connection_issue,
+care_pln_id as effort_care_pln_id,
+cp_connection as effort_cp_connection,
+enctr_id as effort_enctr_id,
+jiva_ep_id as effort_jiva_ep_id,
+jiva_connection as effort_jiva_connection,
+jiva_identified_period as effort_jiva_identified_period,
+current_assigned_practitioner_id as effort_current_assigned_practitioner_id,
+current_assigned_user as effort_current_assigned_user,
+current_assigned_user_team as effort_current_assigned_user_team,
+current_assigned_user_team_bucket as effort_current_assigned_user_team_bucket,
+current_assigned_user_sub_team as effort_current_assigned_user_sub_team,
+current_assigned_user_manager_1 as effort_current_assigned_user_manager_1,
+current_assigned_user_manager_2 as effort_current_assigned_user_manager_2,
+original_practitioner_id as effort_original_practitioner_id,
+original_assigned_user as effort_original_assigned_user,
+original_assigned_user_team as effort_original_assigned_user_team,
+original_assigned_user_team_bucket as effort_original_assigned_user_team_bucket,
+curr_program_title as effort_curr_program_title,
+curr_program_title_group1 as effort_curr_program_title_group1,
+curr_program_title_group2 as effort_curr_program_title_group2,
+episode_status as effort_episode_status,
+episode_start_datetime as effort_episode_start_datetime,
+identified_datetime_strict as effort_identified_datetime_strict,
+identified_datetime as effort_identified_datetime,
+assigned_datetime as effort_assigned_datetime,
+outreach_datetime as effort_outreach_datetime,
+enrolled_datetime as effort_enrolled_datetime,
+first_initial_asmnt_qstn_started_datetime as effort_first_initial_asmnt_qstn_started_datetime,
+first_initial_asmnt_qstn_ind as effort_first_initial_asmnt_qstn_ind,
+pgi_started_datetime as effort_pgi_started_datetime,
+first_intrv_start_dtm as effort_first_intrv_start_dtm,
+first_pgi_completed_datetime as effort_first_pgi_completed_datetime,
+pgi_completed_period as effort_pgi_completed_period,
+participating_datetime as effort_participating_datetime,
+first_followup_asmnt_qstn_started_datetime as effort_first_followup_asmnt_qstn_started_datetime,
+first_followup_asmnt_qstn_ind as effort_first_followup_asmnt_qstn_ind,
+closed_datetime as effort_closed_datetime,
+closed_period as effort_closed_period,
+episode_tat_start_end_days as effort_episode_tat_start_end_days,
+episode_tat_enroll_close_days as effort_episode_tat_enroll_close_days,
+episode_tat_intial_asmnt_close_days as effort_episode_tat_intial_asmnt_close_days,
+episode_tat_identify_enroll_days as effort_episode_tat_identify_enroll_days,
+episode_tat_enroll_pgi_start_days as effort_episode_tat_enroll_pgi_start_days,
+episode_tat_pgi_start_pgi_complete_days as effort_episode_tat_pgi_start_pgi_complete_days,
+episode_tat_pgi_complete_participate_or_close_days as effort_episode_tat_pgi_complete_participate_or_close_days,
+identified_ind as effort_identified_ind,
+assigned_ind as effort_assigned_ind,
+outreach_ind as effort_outreach_ind,
+enrollment_ind as effort_enrollment_ind,
+initial_asmnt_started_ind as effort_initial_asmnt_started_ind,
+participting_ind as effort_participting_ind,
+closed_ind as effort_closed_ind,
+graduated_ind as effort_graduated_ind,
+pgi_ind as effort_pgi_ind,
+pgi_completed_ind as effort_pgi_completed_ind,
+pgi_started_ind as effort_pgi_started_ind,
+pgi_started_cnt as effort_pgi_started_cnt,
+pgi_completed_cnt as effort_pgi_completed_cnt,
+all_pgi_complete_ind as effort_all_pgi_complete_ind,
+clear_triage_ind as effort_clear_triage_ind,
+pharmacy_ind as effort_pharmacy_ind,
+social_worker_ind as effort_social_worker_ind,
+dietitian_ind as effort_dietitian_ind,
+status_change_reason as effort_status_change_reason,
+initial_asmnt_ind as effort_initial_asmnt_ind,
+initial_asmnt_status as effort_initial_asmnt_status,
+initial_asmnt_added_dtm as effort_initial_asmnt_added_dtm,
+initial_asmnt_completed_qstn as effort_initial_asmnt_completed_qstn,
+initial_asmnt_completed_ind as effort_initial_asmnt_completed_ind,
+initial_asmnt_total_qstn as effort_initial_asmnt_total_qstn,
+followup_asmnt_ind as effort_followup_asmnt_ind,
+followup_asmnt_status as effort_followup_asmnt_status,
+followup_asmnt_dtm as effort_followup_asmnt_dtm,
+followup_asmnt_completed_qstn as effort_followup_asmnt_completed_qstn,
+followup_asmnt_total_qstn as effort_followup_asmnt_total_qstn,
+inventory_stratified as effort_inventory_stratified,
+inventory_identified_not_in_jiva as effort_inventory_identified_not_in_jiva,
+inventory_enrolled_not_in_jiva as effort_inventory_enrolled_not_in_jiva,
+inventory_participated_not_in_jiva as effort_inventory_participated_not_in_jiva,
+inventory_identified as effort_inventory_identified,
+inventory_enrolled as effort_inventory_enrolled,
+inventory_initial_asmnt_started as effort_inventory_initial_asmnt_started,
+inventory_pgi_started as effort_inventory_pgi_started,
+inventory_first_pgi_completed as effort_inventory_first_pgi_completed,
+inventory_participating as effort_inventory_participating,
+inventory_follow_up_asmnt_started as effort_inventory_follow_up_asmnt_started,
+workload as effort_workload,
+inventory_closed as effort_inventory_closed,
+first_cha_call_date as effort_first_cha_call_date,
+cha_call_ind as effort_cha_call_ind,
+first_successful_cha_call_date as effort_first_successful_cha_call_date,
+cha_successful_call_ind as effort_cha_successful_call_ind,
+first_call_date as effort_first_call_date,
+call_ind as effort_call_ind,
+first_successful_call_date as effort_first_successful_call_date,
+successful_call_ind as effort_successful_call_ind,
+first_call_team_bucket as effort_first_call_team_bucket,
+first_call_team as effort_first_call_team,
+contact_ind as effort_contact_ind,
+reached_ind as effort_reached_ind,
+member_comm_exists as effort_member_comm_exists,
+call_count_before_enrolled as effort_call_count_before_enrolled,
+call_count_ha_before_enrolled as effort_call_count_ha_before_enrolled,
+call_count_cha_before_enrolled as effort_call_count_cha_before_enrolled,
+talk_tm_before_enrolled as effort_talk_tm_before_enrolled,
+talk_tm_ha_before_enrolled as effort_talk_tm_ha_before_enrolled,
+talk_tm_cha_before_enrolled as effort_talk_tm_cha_before_enrolled,
+wrap_tm_before_enrolled as effort_wrap_tm_before_enrolled,
+wrap_tm_ha_before_enrolled as effort_wrap_tm_ha_before_enrolled,
+wrap_tm_cha_before_enrolled as effort_wrap_tm_cha_before_enrolled,
+call_count_enroll_to_participate as effort_call_count_enroll_to_participate,
+call_count_ha_enroll_to_participate as effort_call_count_ha_enroll_to_participate,
+call_count_cha_enroll_to_participate as effort_call_count_cha_enroll_to_participate,
+talk_tm_enroll_to_participate as effort_talk_tm_enroll_to_participate,
+talk_tm_ha_enroll_to_participate as effort_talk_tm_ha_enroll_to_participate,
+talk_tm_cha_enroll_to_participate as effort_talk_tm_cha_enroll_to_participate,
+wrap_tm_enroll_to_participate as effort_wrap_tm_enroll_to_participate,
+wrap_tm_ha_enroll_to_participate as effort_wrap_tm_ha_enroll_to_participate,
+wrap_tm_cha_enroll_to_participate as effort_wrap_tm_cha_enroll_to_participate,
+call_count_participate_to_close as effort_call_count_participate_to_close,
+call_count_ha_participate_to_close as effort_call_count_ha_participate_to_close,
+call_count_cha_participate_to_close as effort_call_count_cha_participate_to_close,
+talk_tm_participate_to_close as effort_talk_tm_participate_to_close,
+talk_tm_ha_participate_to_close as effort_talk_tm_ha_participate_to_close,
+talk_tm_cha_participate_to_close as effort_talk_tm_cha_participate_to_close,
+wrap_tm_participate_to_close as effort_wrap_tm_participate_to_close,
+wrap_tm_ha_participate_to_close as effort_wrap_tm_ha_participate_to_close,
+wrap_tm_cha_participate_to_close as effort_wrap_tm_cha_participate_to_close,
+call_count_before_enrolled_with_assigned_nurse as effort_call_count_before_enrolled_with_assigned_nurse,
+talk_tm_before_enrolled_with_assigned_nurse as effort_talk_tm_before_enrolled_with_assigned_nurse,
+wrap_tm_before_enrolled_with_assigned_nurse as effort_wrap_tm_before_enrolled_with_assigned_nurse,
+call_count_enroll_to_participate_with_assigned_nurse as effort_call_count_enroll_to_participate_with_assigned_nurse,
+talk_tm_enroll_to_participate_with_assigned_nurse as effort_talk_tm_enroll_to_participate_with_assigned_nurse,
+wrap_tm_enroll_to_participate_with_assigned_nurse as effort_wrap_tm_enroll_to_participate_with_assigned_nurse,
+call_count_participate_to_close_with_assigned_nurse as effort_call_count_participate_to_close_with_assigned_nurse,
+talk_tm_participate_to_close_with_assigned_nurse as effort_talk_tm_participate_to_close_with_assigned_nurse,
+wrap_tm_participate_to_close_with_assigned_nurse as effort_wrap_tm_participate_to_close_with_assigned_nurse,
+call_count_before_enrolled_with_assigned_nurse_team as effort_call_count_before_enrolled_with_assigned_nurse_team,
+talk_tm_before_enrolled_with_assigned_nurse_team as effort_talk_tm_before_enrolled_with_assigned_nurse_team,
+wrap_tm_before_enrolled_with_assigned_nurse_team as effort_wrap_tm_before_enrolled_with_assigned_nurse_team,
+call_count_enroll_to_participate_with_assigned_nurse_team as effort_call_count_enroll_to_participate_with_assigned_nurse_team,
+talk_tm_enroll_to_participate_with_assigned_nurse_team as effort_talk_tm_enroll_to_participate_with_assigned_nurse_team,
+wrap_tm_enroll_to_participate_with_assigned_nurse_team as effort_wrap_tm_enroll_to_participate_with_assigned_nurse_team,
+call_count_participate_to_close_with_assigned_nurse_team as effort_call_count_participate_to_close_with_assigned_nurse_team,
+talk_tm_participate_to_close_with_assigned_nurse_team as effort_talk_tm_participate_to_close_with_assigned_nurse_team,
+wrap_tm_participate_to_close_with_assigned_nurse_team as effort_wrap_tm_participate_to_close_with_assigned_nurse_team,
+pharm_assist_calls as effort_pharm_assist_calls,
+pharm_assist_talk_tm as effort_pharm_assist_talk_tm,
+pharm_assist_wrap_tm as effort_pharm_assist_wrap_tm,
+cfc_call_count as effort_cfc_call_count,
+cfc_mesg_comm_count_before_enroll as effort_cfc_mesg_comm_count_before_enroll,
+cfc_mesg_comm_count_after_enroll as effort_cfc_mesg_comm_count_after_enroll,
+cfc_mesg_comm_count as effort_cfc_mesg_comm_count,
+mesg_id_cnt as effort_mesg_id_cnt,
+ha_mesg_id_cnt as effort_ha_mesg_id_cnt,
+ha_mesg_id_cnt_before_enroll as effort_ha_mesg_id_cnt_before_enroll,
+ha_mesg_id_cnt_after_enroll as effort_ha_mesg_id_cnt_after_enroll,
+cha_mesg_id_cnt as effort_cha_mesg_id_cnt,
+cha_mesg_id_cnt_before_enroll as effort_cha_mesg_id_cnt_before_enroll,
+cha_mesg_id_cnt_after_enroll as effort_cha_mesg_id_cnt_after_enroll,
+other_time_ep_id as effort_other_time_ep_id,
+total_monthly_prep_time_secs as effort_total_monthly_prep_time_secs,
+avg_ep_prep_time_secs as effort_avg_ep_prep_time_secs,
+monthly_non_mbr_call_counts as effort_monthly_non_mbr_call_counts,
+avg_ep_non_mbr_call_counts as effort_avg_ep_non_mbr_call_counts,
+avg_ep_non_mbr_call_counts_provider as effort_avg_ep_non_mbr_call_counts_provider,
+avg_ep_non_mbr_call_counts_vendor as effort_avg_ep_non_mbr_call_counts_vendor,
+avg_ep_non_mbr_call_counts_ben_admin as effort_avg_ep_non_mbr_call_counts_ben_admin,
+avg_ep_non_mbr_call_counts_health_plan as effort_avg_ep_non_mbr_call_counts_health_plan,
+avg_ep_non_mbr_call_counts_accolade as effort_avg_ep_non_mbr_call_counts_accolade,
+avg_ep_non_mbr_call_counts_unknown as effort_avg_ep_non_mbr_call_counts_unknown,
+monthly_non_mbr_talk_tms as effort_monthly_non_mbr_talk_tms,
+avg_ep_non_mbr_talk_tms as effort_avg_ep_non_mbr_talk_tms,
+avg_ep_non_mbr_talk_tms_provider as effort_avg_ep_non_mbr_talk_tms_provider,
+avg_ep_non_mbr_talk_tms_vendor as effort_avg_ep_non_mbr_talk_tms_vendor,
+avg_ep_non_mbr_talk_tms_ben_admin as effort_avg_ep_non_mbr_talk_tms_ben_admin,
+avg_ep_non_mbr_talk_tms_health_plan as effort_avg_ep_non_mbr_talk_tms_health_plan,
+avg_ep_non_mbr_talk_tms_accolade as effort_avg_ep_non_mbr_talk_tms_accolade,
+avg_ep_non_mbr_talk_tms_unknown as effort_avg_ep_non_mbr_talk_tms_unknown,
+monthly_non_mbr_wrap_tms as effort_monthly_non_mbr_wrap_tms,
+avg_ep_non_mbr_wrap_tms as effort_avg_ep_non_mbr_wrap_tms,
+avg_ep_non_mbr_wrap_tms_provider as effort_avg_ep_non_mbr_wrap_tms_provider,
+avg_ep_non_mbr_wrap_tms_vendor as effort_avg_ep_non_mbr_wrap_tms_vendor,
+avg_ep_non_mbr_wrap_tms_ben_admin as effort_avg_ep_non_mbr_wrap_tms_ben_admin,
+avg_ep_non_mbr_wrap_tms_health_plan as effort_avg_ep_non_mbr_wrap_tms_health_plan,
+avg_ep_non_mbr_wrap_tms_accolade as effort_avg_ep_non_mbr_wrap_tms_accolade,
+avg_ep_non_mbr_wrap_tms_unknown as effort_avg_ep_non_mbr_wrap_tms_unknown,
+monthly_non_mbr_work_tms as effort_monthly_non_mbr_work_tms,
+avg_ep_non_mbr_work_tms as effort_avg_ep_non_mbr_work_tms,
+avg_ep_non_mbr_work_tms_provider as effort_avg_ep_non_mbr_work_tms_provider,
+avg_ep_non_mbr_work_tms_vendor as effort_avg_ep_non_mbr_work_tms_vendor,
+avg_ep_non_mbr_work_tms_ben_admin as effort_avg_ep_non_mbr_work_tms_ben_admin,
+avg_ep_non_mbr_work_tms_health_plan as effort_avg_ep_non_mbr_work_tms_health_plan,
+avg_ep_non_mbr_work_tms_accolade as effort_avg_ep_non_mbr_work_tms_accolade,
+avg_ep_non_mbr_work_tms_unknown as effort_avg_ep_non_mbr_work_tms_unknown
+;
+SQL
+select * 
+from #episodes_final
+where jiva_connection = 1 and closed_ind = 1;
+
+
+nurse_assigned_episodes:
+LOAD
+identification_id as nurse_identification_id,
+cf_covg_id as nurse_cf_covg_id,
+hcc_50k as nurse_hcc_50k,
+hcc_100k as nurse_hcc_100k,
+person_id as nurse_person_id,
+stratification_period as nurse_stratification_period,
+strat_pgrm as nurse_strat_pgrm,
+strat_pgrm_bucket as nurse_strat_pgrm_bucket,
+org_nm as nurse_org_nm,
+identification_id_type as nurse_identification_id_type,
+identification_type as nurse_identification_type,
+identification_method as nurse_identification_method,
+referral_src_disp as nurse_referral_src_disp,
+stratified_dt as nurse_stratified_dt,
+identification_dt as nurse_identification_dt,
+data_connection_issue as nurse_data_connection_issue,
+care_pln_id as nurse_care_pln_id,
+cp_connection as nurse_cp_connection,
+enctr_id as nurse_enctr_id,
+jiva_ep_id as nurse_jiva_ep_id,
+jiva_connection as nurse_jiva_connection,
+jiva_identified_period as nurse_jiva_identified_period,
+current_assigned_practitioner_id as nurse_current_assigned_practitioner_id,
+current_assigned_user as nurse_current_assigned_user,
+current_assigned_user_team as nurse_current_assigned_user_team,
+current_assigned_user_team_bucket as nurse_current_assigned_user_team_bucket,
+current_assigned_user_sub_team as nurse_current_assigned_user_sub_team,
+current_assigned_user_manager_1 as nurse_current_assigned_user_manager_1,
+current_assigned_user_manager_2 as nurse_current_assigned_user_manager_2,
+original_practitioner_id as nurse_original_practitioner_id,
+original_assigned_user as nurse_original_assigned_user,
+original_assigned_user_team as nurse_original_assigned_user_team,
+original_assigned_user_team_bucket as nurse_original_assigned_user_team_bucket,
+curr_program_title as nurse_curr_program_title,
+curr_program_title_group1 as nurse_curr_program_title_group1,
+curr_program_title_group2 as nurse_curr_program_title_group2,
+episode_status as nurse_episode_status,
+episode_start_datetime as nurse_episode_start_datetime,
+identified_datetime_strict as nurse_identified_datetime_strict,
+identified_datetime as nurse_identified_datetime,
+assigned_datetime as nurse_assigned_datetime,
+outreach_datetime as nurse_outreach_datetime,
+enrolled_datetime as nurse_enrolled_datetime,
+first_initial_asmnt_qstn_started_datetime as nurse_first_initial_asmnt_qstn_started_datetime,
+first_initial_asmnt_qstn_ind as nurse_first_initial_asmnt_qstn_ind,
+pgi_started_datetime as nurse_pgi_started_datetime,
+first_intrv_start_dtm as nurse_first_intrv_start_dtm,
+first_pgi_completed_datetime as nurse_first_pgi_completed_datetime,
+pgi_completed_period as nurse_pgi_completed_period,
+participating_datetime as nurse_participating_datetime,
+first_followup_asmnt_qstn_started_datetime as nurse_first_followup_asmnt_qstn_started_datetime,
+first_followup_asmnt_qstn_ind as nurse_first_followup_asmnt_qstn_ind,
+closed_datetime as nurse_closed_datetime,
+closed_period as nurse_closed_period,
+episode_tat_start_end_days as nurse_episode_tat_start_end_days,
+episode_tat_enroll_close_days as nurse_episode_tat_enroll_close_days,
+episode_tat_intial_asmnt_close_days as nurse_episode_tat_intial_asmnt_close_days,
+episode_tat_identify_enroll_days as nurse_episode_tat_identify_enroll_days,
+episode_tat_enroll_pgi_start_days as nurse_episode_tat_enroll_pgi_start_days,
+episode_tat_pgi_start_pgi_complete_days as nurse_episode_tat_pgi_start_pgi_complete_days,
+episode_tat_pgi_complete_participate_or_close_days as nurse_episode_tat_pgi_complete_participate_or_close_days,
+identified_ind as nurse_identified_ind,
+assigned_ind as nurse_assigned_ind,
+outreach_ind as nurse_outreach_ind,
+enrollment_ind as nurse_enrollment_ind,
+initial_asmnt_started_ind as nurse_initial_asmnt_started_ind,
+participting_ind as nurse_participting_ind,
+closed_ind as nurse_closed_ind,
+graduated_ind as nurse_graduated_ind,
+pgi_ind as nurse_pgi_ind,
+pgi_completed_ind as nurse_pgi_completed_ind,
+pgi_started_ind as nurse_pgi_started_ind,
+pgi_started_cnt as nurse_pgi_started_cnt,
+pgi_completed_cnt as nurse_pgi_completed_cnt,
+all_pgi_complete_ind as nurse_all_pgi_complete_ind,
+clear_triage_ind as nurse_clear_triage_ind,
+pharmacy_ind as nurse_pharmacy_ind,
+social_worker_ind as nurse_social_worker_ind,
+dietitian_ind as nurse_dietitian_ind,
+status_change_reason as nurse_status_change_reason,
+initial_asmnt_ind as nurse_initial_asmnt_ind,
+initial_asmnt_status as nurse_initial_asmnt_status,
+initial_asmnt_added_dtm as nurse_initial_asmnt_added_dtm,
+initial_asmnt_completed_qstn as nurse_initial_asmnt_completed_qstn,
+initial_asmnt_completed_ind as nurse_initial_asmnt_completed_ind,
+initial_asmnt_total_qstn as nurse_initial_asmnt_total_qstn,
+followup_asmnt_ind as nurse_followup_asmnt_ind,
+followup_asmnt_status as nurse_followup_asmnt_status,
+followup_asmnt_dtm as nurse_followup_asmnt_dtm,
+followup_asmnt_completed_qstn as nurse_followup_asmnt_completed_qstn,
+followup_asmnt_total_qstn as nurse_followup_asmnt_total_qstn,
+inventory_stratified as nurse_inventory_stratified,
+inventory_identified_not_in_jiva as nurse_inventory_identified_not_in_jiva,
+inventory_enrolled_not_in_jiva as nurse_inventory_enrolled_not_in_jiva,
+inventory_participated_not_in_jiva as nurse_inventory_participated_not_in_jiva,
+inventory_identified as nurse_inventory_identified,
+inventory_enrolled as nurse_inventory_enrolled,
+inventory_initial_asmnt_started as nurse_inventory_initial_asmnt_started,
+inventory_pgi_started as nurse_inventory_pgi_started,
+inventory_first_pgi_completed as nurse_inventory_first_pgi_completed,
+inventory_participating as nurse_inventory_participating,
+inventory_follow_up_asmnt_started as nurse_inventory_follow_up_asmnt_started,
+workload as nurse_workload,
+inventory_closed as nurse_inventory_closed,
+first_cha_call_date as nurse_first_cha_call_date,
+cha_call_ind as nurse_cha_call_ind,
+first_successful_cha_call_date as nurse_first_successful_cha_call_date,
+cha_successful_call_ind as nurse_cha_successful_call_ind,
+first_call_date as nurse_first_call_date,
+call_ind as nurse_call_ind,
+first_successful_call_date as nurse_first_successful_call_date,
+successful_call_ind as nurse_successful_call_ind,
+first_call_team_bucket as nurse_first_call_team_bucket,
+first_call_team as nurse_first_call_team,
+contact_ind as nurse_contact_ind,
+reached_ind as nurse_reached_ind,
+member_comm_exists as nurse_member_comm_exists,
+call_count_before_enrolled as nurse_call_count_before_enrolled,
+call_count_ha_before_enrolled as nurse_call_count_ha_before_enrolled,
+call_count_cha_before_enrolled as nurse_call_count_cha_before_enrolled,
+talk_tm_before_enrolled as nurse_talk_tm_before_enrolled,
+talk_tm_ha_before_enrolled as nurse_talk_tm_ha_before_enrolled,
+talk_tm_cha_before_enrolled as nurse_talk_tm_cha_before_enrolled,
+wrap_tm_before_enrolled as nurse_wrap_tm_before_enrolled,
+wrap_tm_ha_before_enrolled as nurse_wrap_tm_ha_before_enrolled,
+wrap_tm_cha_before_enrolled as nurse_wrap_tm_cha_before_enrolled,
+call_count_enroll_to_participate as nurse_call_count_enroll_to_participate,
+call_count_ha_enroll_to_participate as nurse_call_count_ha_enroll_to_participate,
+call_count_cha_enroll_to_participate as nurse_call_count_cha_enroll_to_participate,
+talk_tm_enroll_to_participate as nurse_talk_tm_enroll_to_participate,
+talk_tm_ha_enroll_to_participate as nurse_talk_tm_ha_enroll_to_participate,
+talk_tm_cha_enroll_to_participate as nurse_talk_tm_cha_enroll_to_participate,
+wrap_tm_enroll_to_participate as nurse_wrap_tm_enroll_to_participate,
+wrap_tm_ha_enroll_to_participate as nurse_wrap_tm_ha_enroll_to_participate,
+wrap_tm_cha_enroll_to_participate as nurse_wrap_tm_cha_enroll_to_participate,
+call_count_participate_to_close as nurse_call_count_participate_to_close,
+call_count_ha_participate_to_close as nurse_call_count_ha_participate_to_close,
+call_count_cha_participate_to_close as nurse_call_count_cha_participate_to_close,
+talk_tm_participate_to_close as nurse_talk_tm_participate_to_close,
+talk_tm_ha_participate_to_close as nurse_talk_tm_ha_participate_to_close,
+talk_tm_cha_participate_to_close as nurse_talk_tm_cha_participate_to_close,
+wrap_tm_participate_to_close as nurse_wrap_tm_participate_to_close,
+wrap_tm_ha_participate_to_close as nurse_wrap_tm_ha_participate_to_close,
+wrap_tm_cha_participate_to_close as nurse_wrap_tm_cha_participate_to_close,
+call_count_before_enrolled_with_assigned_nurse as nurse_call_count_before_enrolled_with_assigned_nurse,
+talk_tm_before_enrolled_with_assigned_nurse as nurse_talk_tm_before_enrolled_with_assigned_nurse,
+wrap_tm_before_enrolled_with_assigned_nurse as nurse_wrap_tm_before_enrolled_with_assigned_nurse,
+call_count_enroll_to_participate_with_assigned_nurse as nurse_call_count_enroll_to_participate_with_assigned_nurse,
+talk_tm_enroll_to_participate_with_assigned_nurse as nurse_talk_tm_enroll_to_participate_with_assigned_nurse,
+wrap_tm_enroll_to_participate_with_assigned_nurse as nurse_wrap_tm_enroll_to_participate_with_assigned_nurse,
+call_count_participate_to_close_with_assigned_nurse as nurse_call_count_participate_to_close_with_assigned_nurse,
+talk_tm_participate_to_close_with_assigned_nurse as nurse_talk_tm_participate_to_close_with_assigned_nurse,
+wrap_tm_participate_to_close_with_assigned_nurse as nurse_wrap_tm_participate_to_close_with_assigned_nurse,
+call_count_before_enrolled_with_assigned_nurse_team as nurse_call_count_before_enrolled_with_assigned_nurse_team,
+talk_tm_before_enrolled_with_assigned_nurse_team as nurse_talk_tm_before_enrolled_with_assigned_nurse_team,
+wrap_tm_before_enrolled_with_assigned_nurse_team as nurse_wrap_tm_before_enrolled_with_assigned_nurse_team,
+call_count_enroll_to_participate_with_assigned_nurse_team as nurse_call_count_enroll_to_participate_with_assigned_nurse_team,
+talk_tm_enroll_to_participate_with_assigned_nurse_team as nurse_talk_tm_enroll_to_participate_with_assigned_nurse_team,
+wrap_tm_enroll_to_participate_with_assigned_nurse_team as nurse_wrap_tm_enroll_to_participate_with_assigned_nurse_team,
+call_count_participate_to_close_with_assigned_nurse_team as nurse_call_count_participate_to_close_with_assigned_nurse_team,
+talk_tm_participate_to_close_with_assigned_nurse_team as nurse_talk_tm_participate_to_close_with_assigned_nurse_team,
+wrap_tm_participate_to_close_with_assigned_nurse_team as nurse_wrap_tm_participate_to_close_with_assigned_nurse_team,
+pharm_assist_calls as nurse_pharm_assist_calls,
+pharm_assist_talk_tm as nurse_pharm_assist_talk_tm,
+pharm_assist_wrap_tm as nurse_pharm_assist_wrap_tm,
+cfc_call_count as nurse_cfc_call_count,
+cfc_mesg_comm_count_before_enroll as nurse_cfc_mesg_comm_count_before_enroll,
+cfc_mesg_comm_count_after_enroll as nurse_cfc_mesg_comm_count_after_enroll,
+cfc_mesg_comm_count as nurse_cfc_mesg_comm_count,
+mesg_id_cnt as nurse_mesg_id_cnt,
+ha_mesg_id_cnt as nurse_ha_mesg_id_cnt,
+ha_mesg_id_cnt_before_enroll as nurse_ha_mesg_id_cnt_before_enroll,
+ha_mesg_id_cnt_after_enroll as nurse_ha_mesg_id_cnt_after_enroll,
+cha_mesg_id_cnt as nurse_cha_mesg_id_cnt,
+cha_mesg_id_cnt_before_enroll as nurse_cha_mesg_id_cnt_before_enroll,
+cha_mesg_id_cnt_after_enroll as nurse_cha_mesg_id_cnt_after_enroll,
+other_time_ep_id as nurse_other_time_ep_id,
+total_monthly_prep_time_secs as nurse_total_monthly_prep_time_secs,
+avg_ep_prep_time_secs as nurse_avg_ep_prep_time_secs,
+monthly_non_mbr_call_counts as nurse_monthly_non_mbr_call_counts,
+avg_ep_non_mbr_call_counts as nurse_avg_ep_non_mbr_call_counts,
+avg_ep_non_mbr_call_counts_provider as nurse_avg_ep_non_mbr_call_counts_provider,
+avg_ep_non_mbr_call_counts_vendor as nurse_avg_ep_non_mbr_call_counts_vendor,
+avg_ep_non_mbr_call_counts_ben_admin as nurse_avg_ep_non_mbr_call_counts_ben_admin,
+avg_ep_non_mbr_call_counts_health_plan as nurse_avg_ep_non_mbr_call_counts_health_plan,
+avg_ep_non_mbr_call_counts_accolade as nurse_avg_ep_non_mbr_call_counts_accolade,
+avg_ep_non_mbr_call_counts_unknown as nurse_avg_ep_non_mbr_call_counts_unknown,
+monthly_non_mbr_talk_tms as nurse_monthly_non_mbr_talk_tms,
+avg_ep_non_mbr_talk_tms as nurse_avg_ep_non_mbr_talk_tms,
+avg_ep_non_mbr_talk_tms_provider as nurse_avg_ep_non_mbr_talk_tms_provider,
+avg_ep_non_mbr_talk_tms_vendor as nurse_avg_ep_non_mbr_talk_tms_vendor,
+avg_ep_non_mbr_talk_tms_ben_admin as nurse_avg_ep_non_mbr_talk_tms_ben_admin,
+avg_ep_non_mbr_talk_tms_health_plan as nurse_avg_ep_non_mbr_talk_tms_health_plan,
+avg_ep_non_mbr_talk_tms_accolade as nurse_avg_ep_non_mbr_talk_tms_accolade,
+avg_ep_non_mbr_talk_tms_unknown as nurse_avg_ep_non_mbr_talk_tms_unknown,
+monthly_non_mbr_wrap_tms as nurse_monthly_non_mbr_wrap_tms,
+avg_ep_non_mbr_wrap_tms as nurse_avg_ep_non_mbr_wrap_tms,
+avg_ep_non_mbr_wrap_tms_provider as nurse_avg_ep_non_mbr_wrap_tms_provider,
+avg_ep_non_mbr_wrap_tms_vendor as nurse_avg_ep_non_mbr_wrap_tms_vendor,
+avg_ep_non_mbr_wrap_tms_ben_admin as nurse_avg_ep_non_mbr_wrap_tms_ben_admin,
+avg_ep_non_mbr_wrap_tms_health_plan as nurse_avg_ep_non_mbr_wrap_tms_health_plan,
+avg_ep_non_mbr_wrap_tms_accolade as nurse_avg_ep_non_mbr_wrap_tms_accolade,
+avg_ep_non_mbr_wrap_tms_unknown as nurse_avg_ep_non_mbr_wrap_tms_unknown,
+monthly_non_mbr_work_tms as nurse_monthly_non_mbr_work_tms,
+avg_ep_non_mbr_work_tms as nurse_avg_ep_non_mbr_work_tms,
+avg_ep_non_mbr_work_tms_provider as nurse_avg_ep_non_mbr_work_tms_provider,
+avg_ep_non_mbr_work_tms_vendor as nurse_avg_ep_non_mbr_work_tms_vendor,
+avg_ep_non_mbr_work_tms_ben_admin as nurse_avg_ep_non_mbr_work_tms_ben_admin,
+avg_ep_non_mbr_work_tms_health_plan as nurse_avg_ep_non_mbr_work_tms_health_plan,
+avg_ep_non_mbr_work_tms_accolade as nurse_avg_ep_non_mbr_work_tms_accolade,
+avg_ep_non_mbr_work_tms_unknown as nurse_avg_ep_non_mbr_work_tms_unknown
+;
+SQL
+select * 
+from #episodes_final
+where jiva_connection = 1 and current_assigned_user_team IN ('Erin Hirshorn', 'Patience Jackson','Nancy Costlow');
+
+
+strat_episodes:
+LOAD
+identification_id as strat_identification_id,
+cf_covg_id as strat_cf_covg_id,
+hcc_50k as strat_hcc_50k,
+hcc_100k as strat_hcc_100k,
+person_id as strat_person_id,
+stratification_period as strat_stratification_period,
+strat_pgrm as strat_strat_pgrm,
+strat_pgrm_bucket as strat_strat_pgrm_bucket,
+org_nm as strat_org_nm,
+identification_id_type as strat_identification_id_type,
+identification_type as strat_identification_type,
+identification_method as strat_identification_method,
+referral_src_disp as strat_referral_src_disp,
+stratified_dt as strat_stratified_dt,
+identification_dt as strat_identification_dt,
+data_connection_issue as strat_data_connection_issue,
+care_pln_id as strat_care_pln_id,
+cp_connection as strat_cp_connection,
+enctr_id as strat_enctr_id,
+jiva_ep_id as strat_jiva_ep_id,
+jiva_connection as strat_jiva_connection,
+jiva_identified_period as strat_jiva_identified_period,
+current_assigned_practitioner_id as strat_current_assigned_practitioner_id,
+current_assigned_user as strat_current_assigned_user,
+current_assigned_user_team as strat_current_assigned_user_team,
+current_assigned_user_team_bucket as strat_current_assigned_user_team_bucket,
+current_assigned_user_sub_team as strat_current_assigned_user_sub_team,
+current_assigned_user_manager_1 as strat_current_assigned_user_manager_1,
+current_assigned_user_manager_2 as strat_current_assigned_user_manager_2,
+original_practitioner_id as strat_original_practitioner_id,
+original_assigned_user as strat_original_assigned_user,
+original_assigned_user_team as strat_original_assigned_user_team,
+original_assigned_user_team_bucket as strat_original_assigned_user_team_bucket,
+curr_program_title as strat_curr_program_title,
+curr_program_title_group1 as strat_curr_program_title_group1,
+curr_program_title_group2 as strat_curr_program_title_group2,
+episode_status as strat_episode_status,
+episode_start_datetime as strat_episode_start_datetime,
+identified_datetime_strict as strat_identified_datetime_strict,
+identified_datetime as strat_identified_datetime,
+assigned_datetime as strat_assigned_datetime,
+outreach_datetime as strat_outreach_datetime,
+enrolled_datetime as strat_enrolled_datetime,
+first_initial_asmnt_qstn_started_datetime as strat_first_initial_asmnt_qstn_started_datetime,
+first_initial_asmnt_qstn_ind as strat_first_initial_asmnt_qstn_ind,
+pgi_started_datetime as strat_pgi_started_datetime,
+first_intrv_start_dtm as strat_first_intrv_start_dtm,
+first_pgi_completed_datetime as strat_first_pgi_completed_datetime,
+pgi_completed_period as strat_pgi_completed_period,
+participating_datetime as strat_participating_datetime,
+first_followup_asmnt_qstn_started_datetime as strat_first_followup_asmnt_qstn_started_datetime,
+first_followup_asmnt_qstn_ind as strat_first_followup_asmnt_qstn_ind,
+closed_datetime as strat_closed_datetime,
+closed_period as strat_closed_period,
+episode_tat_start_end_days as strat_episode_tat_start_end_days,
+episode_tat_enroll_close_days as strat_episode_tat_enroll_close_days,
+episode_tat_intial_asmnt_close_days as strat_episode_tat_intial_asmnt_close_days,
+episode_tat_identify_enroll_days as strat_episode_tat_identify_enroll_days,
+episode_tat_enroll_pgi_start_days as strat_episode_tat_enroll_pgi_start_days,
+episode_tat_pgi_start_pgi_complete_days as strat_episode_tat_pgi_start_pgi_complete_days,
+episode_tat_pgi_complete_participate_or_close_days as strat_episode_tat_pgi_complete_participate_or_close_days,
+identified_ind as strat_identified_ind,
+assigned_ind as strat_assigned_ind,
+outreach_ind as strat_outreach_ind,
+enrollment_ind as strat_enrollment_ind,
+initial_asmnt_started_ind as strat_initial_asmnt_started_ind,
+participting_ind as strat_participting_ind,
+closed_ind as strat_closed_ind,
+graduated_ind as strat_graduated_ind,
+pgi_ind as strat_pgi_ind,
+pgi_completed_ind as strat_pgi_completed_ind,
+pgi_started_ind as strat_pgi_started_ind,
+pgi_started_cnt as strat_pgi_started_cnt,
+pgi_completed_cnt as strat_pgi_completed_cnt,
+all_pgi_complete_ind as strat_all_pgi_complete_ind,
+clear_triage_ind as strat_clear_triage_ind,
+pharmacy_ind as strat_pharmacy_ind,
+social_worker_ind as strat_social_worker_ind,
+dietitian_ind as strat_dietitian_ind,
+status_change_reason as strat_status_change_reason,
+initial_asmnt_ind as strat_initial_asmnt_ind,
+initial_asmnt_status as strat_initial_asmnt_status,
+initial_asmnt_added_dtm as strat_initial_asmnt_added_dtm,
+initial_asmnt_completed_qstn as strat_initial_asmnt_completed_qstn,
+initial_asmnt_completed_ind as strat_initial_asmnt_completed_ind,
+initial_asmnt_total_qstn as strat_initial_asmnt_total_qstn,
+followup_asmnt_ind as strat_followup_asmnt_ind,
+followup_asmnt_status as strat_followup_asmnt_status,
+followup_asmnt_dtm as strat_followup_asmnt_dtm,
+followup_asmnt_completed_qstn as strat_followup_asmnt_completed_qstn,
+followup_asmnt_total_qstn as strat_followup_asmnt_total_qstn,
+inventory_stratified as strat_inventory_stratified,
+inventory_identified_not_in_jiva as strat_inventory_identified_not_in_jiva,
+inventory_enrolled_not_in_jiva as strat_inventory_enrolled_not_in_jiva,
+inventory_participated_not_in_jiva as strat_inventory_participated_not_in_jiva,
+inventory_identified as strat_inventory_identified,
+inventory_enrolled as strat_inventory_enrolled,
+inventory_initial_asmnt_started as strat_inventory_initial_asmnt_started,
+inventory_pgi_started as strat_inventory_pgi_started,
+inventory_first_pgi_completed as strat_inventory_first_pgi_completed,
+inventory_participating as strat_inventory_participating,
+inventory_follow_up_asmnt_started as strat_inventory_follow_up_asmnt_started,
+workload as strat_workload,
+inventory_closed as strat_inventory_closed,
+first_cha_call_date as strat_first_cha_call_date,
+cha_call_ind as strat_cha_call_ind,
+first_successful_cha_call_date as strat_first_successful_cha_call_date,
+cha_successful_call_ind as strat_cha_successful_call_ind,
+first_call_date as strat_first_call_date,
+call_ind as strat_call_ind,
+first_successful_call_date as strat_first_successful_call_date,
+successful_call_ind as strat_successful_call_ind,
+first_call_team_bucket as strat_first_call_team_bucket,
+first_call_team as strat_first_call_team,
+contact_ind as strat_contact_ind,
+reached_ind as strat_reached_ind,
+member_comm_exists as strat_member_comm_exists,
+call_count_before_enrolled as strat_call_count_before_enrolled,
+call_count_ha_before_enrolled as strat_call_count_ha_before_enrolled,
+call_count_cha_before_enrolled as strat_call_count_cha_before_enrolled,
+talk_tm_before_enrolled as strat_talk_tm_before_enrolled,
+talk_tm_ha_before_enrolled as strat_talk_tm_ha_before_enrolled,
+talk_tm_cha_before_enrolled as strat_talk_tm_cha_before_enrolled,
+wrap_tm_before_enrolled as strat_wrap_tm_before_enrolled,
+wrap_tm_ha_before_enrolled as strat_wrap_tm_ha_before_enrolled,
+wrap_tm_cha_before_enrolled as strat_wrap_tm_cha_before_enrolled,
+call_count_enroll_to_participate as strat_call_count_enroll_to_participate,
+call_count_ha_enroll_to_participate as strat_call_count_ha_enroll_to_participate,
+call_count_cha_enroll_to_participate as strat_call_count_cha_enroll_to_participate,
+talk_tm_enroll_to_participate as strat_talk_tm_enroll_to_participate,
+talk_tm_ha_enroll_to_participate as strat_talk_tm_ha_enroll_to_participate,
+talk_tm_cha_enroll_to_participate as strat_talk_tm_cha_enroll_to_participate,
+wrap_tm_enroll_to_participate as strat_wrap_tm_enroll_to_participate,
+wrap_tm_ha_enroll_to_participate as strat_wrap_tm_ha_enroll_to_participate,
+wrap_tm_cha_enroll_to_participate as strat_wrap_tm_cha_enroll_to_participate,
+call_count_participate_to_close as strat_call_count_participate_to_close,
+call_count_ha_participate_to_close as strat_call_count_ha_participate_to_close,
+call_count_cha_participate_to_close as strat_call_count_cha_participate_to_close,
+talk_tm_participate_to_close as strat_talk_tm_participate_to_close,
+talk_tm_ha_participate_to_close as strat_talk_tm_ha_participate_to_close,
+talk_tm_cha_participate_to_close as strat_talk_tm_cha_participate_to_close,
+wrap_tm_participate_to_close as strat_wrap_tm_participate_to_close,
+wrap_tm_ha_participate_to_close as strat_wrap_tm_ha_participate_to_close,
+wrap_tm_cha_participate_to_close as strat_wrap_tm_cha_participate_to_close,
+call_count_before_enrolled_with_assigned_nurse as strat_call_count_before_enrolled_with_assigned_nurse,
+talk_tm_before_enrolled_with_assigned_nurse as strat_talk_tm_before_enrolled_with_assigned_nurse,
+wrap_tm_before_enrolled_with_assigned_nurse as strat_wrap_tm_before_enrolled_with_assigned_nurse,
+call_count_enroll_to_participate_with_assigned_nurse as strat_call_count_enroll_to_participate_with_assigned_nurse,
+talk_tm_enroll_to_participate_with_assigned_nurse as strat_talk_tm_enroll_to_participate_with_assigned_nurse,
+wrap_tm_enroll_to_participate_with_assigned_nurse as strat_wrap_tm_enroll_to_participate_with_assigned_nurse,
+call_count_participate_to_close_with_assigned_nurse as strat_call_count_participate_to_close_with_assigned_nurse,
+talk_tm_participate_to_close_with_assigned_nurse as strat_talk_tm_participate_to_close_with_assigned_nurse,
+wrap_tm_participate_to_close_with_assigned_nurse as strat_wrap_tm_participate_to_close_with_assigned_nurse,
+call_count_before_enrolled_with_assigned_nurse_team as strat_call_count_before_enrolled_with_assigned_nurse_team,
+talk_tm_before_enrolled_with_assigned_nurse_team as strat_talk_tm_before_enrolled_with_assigned_nurse_team,
+wrap_tm_before_enrolled_with_assigned_nurse_team as strat_wrap_tm_before_enrolled_with_assigned_nurse_team,
+call_count_enroll_to_participate_with_assigned_nurse_team as strat_call_count_enroll_to_participate_with_assigned_nurse_team,
+talk_tm_enroll_to_participate_with_assigned_nurse_team as strat_talk_tm_enroll_to_participate_with_assigned_nurse_team,
+wrap_tm_enroll_to_participate_with_assigned_nurse_team as strat_wrap_tm_enroll_to_participate_with_assigned_nurse_team,
+call_count_participate_to_close_with_assigned_nurse_team as strat_call_count_participate_to_close_with_assigned_nurse_team,
+talk_tm_participate_to_close_with_assigned_nurse_team as strat_talk_tm_participate_to_close_with_assigned_nurse_team,
+wrap_tm_participate_to_close_with_assigned_nurse_team as strat_wrap_tm_participate_to_close_with_assigned_nurse_team,
+pharm_assist_calls as strat_pharm_assist_calls,
+pharm_assist_talk_tm as strat_pharm_assist_talk_tm,
+pharm_assist_wrap_tm as strat_pharm_assist_wrap_tm,
+cfc_call_count as strat_cfc_call_count,
+cfc_mesg_comm_count_before_enroll as strat_cfc_mesg_comm_count_before_enroll,
+cfc_mesg_comm_count_after_enroll as strat_cfc_mesg_comm_count_after_enroll,
+cfc_mesg_comm_count as strat_cfc_mesg_comm_count,
+mesg_id_cnt as strat_mesg_id_cnt,
+ha_mesg_id_cnt as strat_ha_mesg_id_cnt,
+ha_mesg_id_cnt_before_enroll as strat_ha_mesg_id_cnt_before_enroll,
+ha_mesg_id_cnt_after_enroll as strat_ha_mesg_id_cnt_after_enroll,
+cha_mesg_id_cnt as strat_cha_mesg_id_cnt,
+cha_mesg_id_cnt_before_enroll as strat_cha_mesg_id_cnt_before_enroll,
+cha_mesg_id_cnt_after_enroll as strat_cha_mesg_id_cnt_after_enroll,
+other_time_ep_id as strat_other_time_ep_id,
+total_monthly_prep_time_secs as strat_total_monthly_prep_time_secs,
+avg_ep_prep_time_secs as strat_avg_ep_prep_time_secs,
+monthly_non_mbr_call_counts as strat_monthly_non_mbr_call_counts,
+avg_ep_non_mbr_call_counts as strat_avg_ep_non_mbr_call_counts,
+avg_ep_non_mbr_call_counts_provider as strat_avg_ep_non_mbr_call_counts_provider,
+avg_ep_non_mbr_call_counts_vendor as strat_avg_ep_non_mbr_call_counts_vendor,
+avg_ep_non_mbr_call_counts_ben_admin as strat_avg_ep_non_mbr_call_counts_ben_admin,
+avg_ep_non_mbr_call_counts_health_plan as strat_avg_ep_non_mbr_call_counts_health_plan,
+avg_ep_non_mbr_call_counts_accolade as strat_avg_ep_non_mbr_call_counts_accolade,
+avg_ep_non_mbr_call_counts_unknown as strat_avg_ep_non_mbr_call_counts_unknown,
+monthly_non_mbr_talk_tms as strat_monthly_non_mbr_talk_tms,
+avg_ep_non_mbr_talk_tms as strat_avg_ep_non_mbr_talk_tms,
+avg_ep_non_mbr_talk_tms_provider as strat_avg_ep_non_mbr_talk_tms_provider,
+avg_ep_non_mbr_talk_tms_vendor as strat_avg_ep_non_mbr_talk_tms_vendor,
+avg_ep_non_mbr_talk_tms_ben_admin as strat_avg_ep_non_mbr_talk_tms_ben_admin,
+avg_ep_non_mbr_talk_tms_health_plan as strat_avg_ep_non_mbr_talk_tms_health_plan,
+avg_ep_non_mbr_talk_tms_accolade as strat_avg_ep_non_mbr_talk_tms_accolade,
+avg_ep_non_mbr_talk_tms_unknown as strat_avg_ep_non_mbr_talk_tms_unknown,
+monthly_non_mbr_wrap_tms as strat_monthly_non_mbr_wrap_tms,
+avg_ep_non_mbr_wrap_tms as strat_avg_ep_non_mbr_wrap_tms,
+avg_ep_non_mbr_wrap_tms_provider as strat_avg_ep_non_mbr_wrap_tms_provider,
+avg_ep_non_mbr_wrap_tms_vendor as strat_avg_ep_non_mbr_wrap_tms_vendor,
+avg_ep_non_mbr_wrap_tms_ben_admin as strat_avg_ep_non_mbr_wrap_tms_ben_admin,
+avg_ep_non_mbr_wrap_tms_health_plan as strat_avg_ep_non_mbr_wrap_tms_health_plan,
+avg_ep_non_mbr_wrap_tms_accolade as strat_avg_ep_non_mbr_wrap_tms_accolade,
+avg_ep_non_mbr_wrap_tms_unknown as strat_avg_ep_non_mbr_wrap_tms_unknown,
+monthly_non_mbr_work_tms as strat_monthly_non_mbr_work_tms,
+avg_ep_non_mbr_work_tms as strat_avg_ep_non_mbr_work_tms,
+avg_ep_non_mbr_work_tms_provider as strat_avg_ep_non_mbr_work_tms_provider,
+avg_ep_non_mbr_work_tms_vendor as strat_avg_ep_non_mbr_work_tms_vendor,
+avg_ep_non_mbr_work_tms_ben_admin as strat_avg_ep_non_mbr_work_tms_ben_admin,
+avg_ep_non_mbr_work_tms_health_plan as strat_avg_ep_non_mbr_work_tms_health_plan,
+avg_ep_non_mbr_work_tms_accolade as strat_avg_ep_non_mbr_work_tms_accolade,
+avg_ep_non_mbr_work_tms_unknown as strat_avg_ep_non_mbr_work_tms_unknown
+;
+SQL
+select *
+from #episodes_final
+where stratification_period is not null;
+
