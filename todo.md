@@ -10,12 +10,8 @@
 - [ ] [[strat types]]
 - [ ] [[mailers_ha_activities]]
 - [ ] [[care nav contact]]
+- [ ] [[take out managers]]
 - [ ] Send samples of episodes with missing assigned dates with enroll dates for tam to review
-- [ ] For the PPT
-  - [ ] Add initial asmnt and asmnt completed to the strat views
-  - [ ] remove corp holidays from TAT calculations
-  - [ ] Refresh the excel data
-- [x] Add strat grouping view by strat type
 - [ ] Add chart views from PPT
 - [ ] Add slide that breaks down utilization by diffferent groupings (By Mid Week next week)
   - [ ] By Strat Type? Program?
@@ -33,5 +29,4 @@
     - [ ] Develop new factor for each program based on the work effort for each program compared to some kind of average or something
 - [ ] Add Workload Dist PPT Slide to Qlik
 - [ ] Throw out managers
-- [ ] 
 - [ ] Look at trend in Maternity nurse count from 2022 - 2023

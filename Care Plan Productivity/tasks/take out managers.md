@@ -1,0 +1,1 @@
+Need to find a way to take out managers in the care plan dashboard. use job_role_txt or group_txt?
